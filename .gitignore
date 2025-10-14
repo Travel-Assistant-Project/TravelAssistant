@@ -1,0 +1,34 @@
+# --- Node / React Native ---
+node_modules/
+.expo/
+.expo-shared/
+npm-debug.log
+yarn-error.log
+dist/
+build/
+*.expo
+*.log
+
+# --- macOS ---
+.DS_Store
+
+# --- VSCode ---
+.vscode/
+
+# --- .NET / C# ---
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.dbmdl
+*.pdb
+
+# --- Environment / secrets ---
+.env
+.env.*
+secrets.json
+
+# --- Git ---
+*.orig
