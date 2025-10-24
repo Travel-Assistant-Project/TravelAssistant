@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-
+// DENEME İÇİN YAZILMIŞTIR
 namespace SmartTripApi.Controllers
 {
     [ApiController]
