@@ -7,6 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Şifreleme -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    
+    <!-- PostgreSQL -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+
+    <!-- JWT Auth -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+
+    <!-- Swagger/OpenAPI -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.11" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
