@@ -4,8 +4,15 @@ using Microsoft.IdentityModel.Tokens;
 using SmartTripApi.Data;
 using SmartTripApi.Services;
 using System.Text;
+using DotNetEnv;
+
+// Load .env file
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Environment variable expansion
+builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddControllers();
 
@@ -29,6 +36,11 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 
 // JWT
 builder.Services.AddScoped<JwtTokenService>();
+
+// AI Services
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<SmartTripApi.Services.AI.PromptBuilder>();
+builder.Services.AddScoped<SmartTripApi.Services.AI.AIService>();
 
 var secret = builder.Configuration["Jwt:Secret"]!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
