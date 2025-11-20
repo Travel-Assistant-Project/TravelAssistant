@@ -1,13 +1,43 @@
 namespace SmartTripApi.DTOs
 {
+    public enum BudgetLevel
+    {
+        Low,
+        Medium,
+        High
+    }
+
+    public enum IntensityLevel
+    {
+        Relaxed,
+        Active
+    }
+
+    public enum TransportMode
+    {
+        Car,
+        Walk,
+        PublicTransport
+    }
+
+    public enum ThemeType
+    {
+        Nature,
+        Sea,
+        History,
+        Beach,
+        Food,
+        Photospot
+    }
+
     public class TripPlanRequest
     {
         public string Region { get; set; } = string.Empty;
         public int Days { get; set; }
-        public string Theme { get; set; } = string.Empty;
-        public string Budget { get; set; } = string.Empty;
-        public string Intensity { get; set; } = string.Empty;
-        public string Transport { get; set; } = string.Empty;
+        public ThemeType Theme { get; set; }
+        public BudgetLevel Budget { get; set; }
+        public IntensityLevel Intensity { get; set; }
+        public TransportMode Transport { get; set; }
     }
 
     public class TripPlanResponse
