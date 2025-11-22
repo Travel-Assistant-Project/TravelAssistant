@@ -26,6 +26,70 @@ namespace SmartTripApi.Services.AI
             }
         }
 
+        public async Task<AIRoutePlanResponse> GenerateRoutePlanAsync(RoutePlanRequestDto request)
+        {
+            try
+            {
+                var prompt = _promptBuilder.BuildRoutePlanPrompt(request);
+                
+                var geminiRequest = new
+                {
+                    contents = new[]
+                    {
+                        new
+                        {
+                            parts = new[]
+                            {
+                                new { text = prompt }
+                            }
+                        }
+                    }
+                };
+
+                var json = JsonSerializer.Serialize(geminiRequest);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(
+                    $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}", 
+                    content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    throw new Exception($"Gemini API error: {response.StatusCode} - {errorContent}");
+                }
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var geminiResponse = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                // Gemini API response'undan text'i çıkar
+                var generatedText = geminiResponse
+                    .GetProperty("candidates")[0]
+                    .GetProperty("content")
+                    .GetProperty("parts")[0]
+                    .GetProperty("text")
+                    .GetString();
+
+                if (string.IsNullOrEmpty(generatedText))
+                {
+                    throw new Exception("Empty response from Gemini API");
+                }
+
+                // JSON'ı temizle ve parse et
+                var cleanJson = ExtractJsonFromResponse(generatedText);
+                var routePlan = JsonSerializer.Deserialize<AIRoutePlanResponse>(cleanJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                return routePlan ?? throw new Exception("Failed to parse AI response");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"AI service error: {ex.Message}", ex);
+            }
+        }
+
         public async Task<TripPlanResponse> GenerateTripPlanAsync(TripPlanRequest request)
         {
             try
