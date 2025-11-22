@@ -32,3 +32,5 @@ secrets.json
 
 # --- Git ---
 *.orig
+
+.fake
