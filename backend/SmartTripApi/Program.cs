@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SmartTripApi.Data;
 using SmartTripApi.Services;
+using SmartTripApi.Models;
 using System.Text;
 using DotNetEnv;
 
@@ -45,8 +46,20 @@ var dbPass = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "";
 // Build connection string from environment variables
 var connectionString = $"Host={dbHost};Database={dbName};Username={dbUser};Password={dbPass}";
 
+// Map PostgreSQL enums
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    options.UseNpgsql(connectionString, o => 
+    {
+        o.MapEnum<BudgetLevelEnum>("budget_level");
+        o.MapEnum<IntensityLevelEnum>("intensity_level");
+        o.MapEnum<TransportModeEnum>("transport_mode");
+        o.MapEnum<ThemeTypeEnum>("theme_type");
+        o.MapEnum<UserRoleEnum>("user_role");
+    });
+});
 
 // ----------------------------------------------------
 // JWT AUTH
