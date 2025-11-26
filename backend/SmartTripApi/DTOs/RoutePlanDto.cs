@@ -1,73 +1,75 @@
+using SmartTripApi.Models;
+
 namespace SmartTripApi.DTOs
 {
+    // =======================
+    // REQUEST DTO
+    // =======================
     public class RoutePlanRequestDto
     {
         public string Region { get; set; } = string.Empty;
         public int Days { get; set; }
-        
-        // SINGLE VALUE SUPPORT 
-        public int? Theme { get; set; }        // Single theme selection (0-5)
-        public int? Budget { get; set; }       // Single budget selection (0-2)
-        public int? Intensity { get; set; }    // Single intensity selection (0-1)
-        public int? Transport { get; set; }    // Single transport selection (0-2)
-        
-        // MULTIPLE VALUES SUPPORT
-        public List<int>? Themes { get; set; }        // Multiple themes (0-5)
-        public List<int>? Budgets { get; set; }       // Multiple budgets (0-2)
-        public List<int>? Intensities { get; set; }   // Multiple intensities (0-1)
-        public List<int>? Transports { get; set; }    // Multiple transports (0-2)
 
-        // Get effective themes (either from Theme or Themes)
-        private List<int> GetEffectiveThemes()
-        {
-            if (Themes != null && Themes.Any()) return Themes;
-            if (Theme.HasValue) return new List<int> { Theme.Value };
-            return new List<int>();
-        }
+        // SINGLE VALUE
+        public int? Theme { get; set; }
+        public int? Budget { get; set; }
+        public int? Intensity { get; set; }
+        public int? Transport { get; set; }
 
-        private List<int> GetEffectiveBudgets()
-        {
-            if (Budgets != null && Budgets.Any()) return Budgets;
-            if (Budget.HasValue) return new List<int> { Budget.Value };
-            return new List<int>();
-        }
+        // MULTIPLE VALUES
+        public List<int>? Themes { get; set; }
+        public List<int>? Budgets { get; set; }
+        public List<int>? Intensities { get; set; }
+        public List<int>? Transports { get; set; }
 
-        private List<int> GetEffectiveIntensities()
-        {
-            if (Intensities != null && Intensities.Any()) return Intensities;
-            if (Intensity.HasValue) return new List<int> { Intensity.Value };
-            return new List<int>();
-        }
 
-        private List<int> GetEffectiveTransports()
-        {
-            if (Transports != null && Transports.Any()) return Transports;
-            if (Transport.HasValue) return new List<int> { Transport.Value };
-            return new List<int>();
-        }
+        // ---- EFFECTIVE VALUE METHODS ----
+        private List<int> GetEffectiveThemes() =>
+            Themes?.Any() == true ? Themes! :
+            Theme.HasValue ? new() { Theme.Value } :
+            new();
 
-        public List<ThemeType> GetThemeTypes() => 
+        private List<int> GetEffectiveBudgets() =>
+            Budgets?.Any() == true ? Budgets! :
+            Budget.HasValue ? new() { Budget.Value } :
+            new();
+
+        private List<int> GetEffectiveIntensities() =>
+            Intensities?.Any() == true ? Intensities! :
+            Intensity.HasValue ? new() { Intensity.Value } :
+            new();
+
+        private List<int> GetEffectiveTransports() =>
+            Transports?.Any() == true ? Transports! :
+            Transport.HasValue ? new() { Transport.Value } :
+            new();
+
+
+        // ---- ENUM LISTS ----
+        public List<ThemeType> GetThemeTypes() =>
             GetEffectiveThemes().Select(t => (ThemeType)t).ToList();
-        
-        public List<BudgetLevel> GetBudgetLevels() => 
+
+        public List<BudgetLevel> GetBudgetLevels() =>
             GetEffectiveBudgets().Select(b => (BudgetLevel)b).ToList();
-        
-        public List<IntensityLevel> GetIntensityLevels() => 
+
+        public List<IntensityLevel> GetIntensityLevels() =>
             GetEffectiveIntensities().Select(i => (IntensityLevel)i).ToList();
-        
-        public List<TransportMode> GetTransportModes() => 
+
+        public List<TransportMode> GetTransportModes() =>
             GetEffectiveTransports().Select(t => (TransportMode)t).ToList();
-        
-        public List<string> GetThemeStrings() => 
+
+
+        // ---- LOWER STRING LISTS ----
+        public List<string> GetThemeStrings() =>
             GetThemeTypes().Select(t => t.ToString().ToLower()).ToList();
-        
-        public List<string> GetBudgetStrings() => 
+
+        public List<string> GetBudgetStrings() =>
             GetBudgetLevels().Select(b => b.ToString().ToLower()).ToList();
-        
-        public List<string> GetIntensityStrings() => 
+
+        public List<string> GetIntensityStrings() =>
             GetIntensityLevels().Select(i => i.ToString().ToLower()).ToList();
-        
-        public List<string> GetTransportStrings() => 
+
+        public List<string> GetTransportStrings() =>
             GetTransportModes().Select(t => t switch
             {
                 TransportMode.Car => "car",
@@ -76,32 +78,37 @@ namespace SmartTripApi.DTOs
                 _ => "car"
             }).ToList();
 
-        // Helper method to get primary theme (first in list) for database storage
+
+        // ---- PRIMARY VALUES ----
         public ThemeType? GetPrimaryTheme()
         {
-            var themes = GetEffectiveThemes();
-            return themes.Any() ? (ThemeType)themes[0] : null;
+            var list = GetEffectiveThemes();
+            return list.Any() ? (ThemeType)list[0] : null;
         }
-        
+
         public BudgetLevel? GetPrimaryBudget()
         {
-            var budgets = GetEffectiveBudgets();
-            return budgets.Any() ? (BudgetLevel)budgets[0] : null;
+            var list = GetEffectiveBudgets();
+            return list.Any() ? (BudgetLevel)list[0] : null;
         }
-        
+
         public IntensityLevel? GetPrimaryIntensity()
         {
-            var intensities = GetEffectiveIntensities();
-            return intensities.Any() ? (IntensityLevel)intensities[0] : null;
+            var list = GetEffectiveIntensities();
+            return list.Any() ? (IntensityLevel)list[0] : null;
         }
-        
+
         public TransportMode? GetPrimaryTransport()
         {
-            var transports = GetEffectiveTransports();
-            return transports.Any() ? (TransportMode)transports[0] : null;
+            var list = GetEffectiveTransports();
+            return list.Any() ? (TransportMode)list[0] : null;
         }
     }
 
+
+    // =======================
+    // RESPONSE DTO
+    // =======================
     public class RoutePlanResponseDto
     {
         public int ItineraryId { get; set; }
@@ -135,7 +142,10 @@ namespace SmartTripApi.DTOs
         public string? Country { get; set; }
     }
 
-    // AI Response DTOs
+
+    // =======================
+    // AI RESPONSE DTO
+    // =======================
     public class AIRoutePlanResponse
     {
         public string PlanName { get; set; } = string.Empty;
@@ -164,5 +174,23 @@ namespace SmartTripApi.DTOs
         public string? Description { get; set; }
         public string? City { get; set; }
         public string? Country { get; set; }
+    }
+
+
+    // =======================
+    // USER ROUTE SUMMARY DTO
+    // =======================
+    public class UserRouteSummaryDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Region { get; set; } = "";
+        public int DaysCount { get; set; }
+        public ThemeTypeEnum? Theme { get; set; }
+        public BudgetLevelEnum? Budget { get; set; }
+        public IntensityLevelEnum? Intensity { get; set; }
+        public TransportModeEnum? Transport { get; set; }
+        public bool IsAiGenerated { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 }
