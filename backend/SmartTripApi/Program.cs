@@ -4,6 +4,10 @@ using Microsoft.IdentityModel.Tokens;
 using SmartTripApi.Data;
 using SmartTripApi.Services;
 using SmartTripApi.Models;
+using SmartTripApi.Services.AI;
+using SmartTripApi.Services.GooglePlaces;
+using SmartTripApi.Services.Weather;
+using SmartTripApi.Services.RoutePlanning;
 using System.Text;
 using DotNetEnv;
 
@@ -44,7 +48,7 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseNpgsql(connectionString, o => 
+    options.UseNpgsql(connectionString, o =>
     {
         o.MapEnum<BudgetLevelEnum>("budget_level");
         o.MapEnum<IntensityLevelEnum>("intensity_level");
@@ -72,17 +76,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-
+// HttpClient + servis kayıtları
 builder.Services.AddHttpClient();
-builder.Services.AddScoped<SmartTripApi.Services.AI.PromptBuilder>();
-builder.Services.AddScoped<SmartTripApi.Services.AI.AIService>();
 
-builder.Services.AddScoped<SmartTripApi.Services.GooglePlaces.GooglePlacesService>();
-builder.Services.AddScoped<SmartTripApi.Services.GooglePlaces.PlaceEnrichmentService>();
+// AI
+builder.Services.AddScoped<PromptBuilder>();
+builder.Services.AddScoped<AIService>();
+
+// Google Places
+builder.Services.AddScoped<GooglePlacesService>();
+builder.Services.AddScoped<PlaceEnrichmentService>();
+
+// WeatherService (Typed HttpClient)
+builder.Services.AddHttpClient<IWeatherService, WeatherService>();
+
+//Route Planning Service 
+builder.Services.AddScoped<IRoutePlanService, RoutePlanService>();
 
 // Read API keys from .env file and override appsettings
 var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 var googleApiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
+var weatherApiKey = Environment.GetEnvironmentVariable("WEATHERAPI_KEY");
 
 if (!string.IsNullOrEmpty(geminiApiKey))
 {
@@ -92,6 +106,12 @@ if (!string.IsNullOrEmpty(geminiApiKey))
 if (!string.IsNullOrEmpty(googleApiKey))
 {
     builder.Configuration["GooglePlaces:ApiKey"] = googleApiKey;
+}
+
+if (!string.IsNullOrEmpty(weatherApiKey))
+{
+    // Yeni config path → WeatherApi:ApiKey
+    builder.Configuration["WeatherApi:ApiKey"] = weatherApiKey;
 }
 
 
