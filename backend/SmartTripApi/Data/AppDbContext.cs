@@ -13,6 +13,9 @@ public class AppDbContext : DbContext
     public DbSet<Place> Places => Set<Place>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<AIRequest> AIRequests => Set<AIRequest>();
+    public DbSet<PlacePhoto> PlacePhotos => Set<PlacePhoto>();
+    public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<GoogleReview> GoogleReviews => Set<GoogleReview>();
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -46,6 +49,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.Intensity).HasColumnName("intensity").HasColumnType("intensity_level");
             e.Property(x => x.Transport).HasColumnName("transport").HasColumnType("transport_mode");
             e.Property(x => x.IsAiGenerated).HasColumnName("is_ai_generated");
+            e.Property(x => x.Status).HasColumnName("status");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
             e.HasOne(x => x.User)
@@ -86,6 +90,12 @@ public class AppDbContext : DbContext
             e.Property(x => x.Country).HasColumnName("country");
             e.Property(x => x.GoogleMapsUrl).HasColumnName("google_maps_url");
             e.Property(x => x.GoogleRating).HasColumnName("google_rating").HasPrecision(2, 1);
+            e.Property(x => x.GooglePlaceId).HasColumnName("google_place_id");
+            e.Property(x => x.FormattedAddress).HasColumnName("formatted_address");
+            e.Property(x => x.UserRatingsTotal).HasColumnName("user_ratings_total");
+            e.Property(x => x.PriceLevel).HasColumnName("price_level");
+            e.Property(x => x.OpeningHours).HasColumnName("opening_hours").HasColumnType("jsonb");
+            e.Property(x => x.PhotoUrls).HasColumnName("photo_urls");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
         });
 
@@ -135,6 +145,62 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Itinerary)
                 .WithMany()
                 .HasForeignKey(x => x.ItineraryId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Place Photos
+        m.Entity<PlacePhoto>(e =>
+        {
+            e.ToTable("place_photos");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.PlaceId).HasColumnName("place_id");
+            e.Property(x => x.ImageUrl).HasColumnName("image_url");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.Place)
+                .WithMany(p => p.PlacePhotos)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Reviews
+        m.Entity<Review>(e =>
+        {
+            e.ToTable("reviews");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.PlaceId).HasColumnName("place_id");
+            e.Property(x => x.Comment).HasColumnName("comment");
+            e.Property(x => x.Rating).HasColumnName("rating");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Place)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Google Reviews
+        m.Entity<GoogleReview>(e =>
+        {
+            e.ToTable("google_reviews");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.PlaceId).HasColumnName("place_id");
+            e.Property(x => x.AuthorName).HasColumnName("author_name");
+            e.Property(x => x.Comment).HasColumnName("comment");
+            e.Property(x => x.Rating).HasColumnName("rating");
+            e.Property(x => x.ProfilePhotoUrl).HasColumnName("profile_photo_url");
+            e.Property(x => x.ReviewTime).HasColumnName("review_time");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.Place)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -29,6 +29,8 @@ obj/
 .env
 .env.*
 secrets.json
+appsettings.Development.json
+appsettings.*.json
 
 # --- Git ---
 *.orig

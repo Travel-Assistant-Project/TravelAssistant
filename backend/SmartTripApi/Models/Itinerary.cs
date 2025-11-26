@@ -12,6 +12,7 @@ namespace SmartTripApi.Models
         public IntensityLevelEnum? Intensity { get; set; }
         public TransportModeEnum? Transport { get; set; }
         public bool IsAiGenerated { get; set; } = false;
+        public string Status { get; set; } = "pending"; // pending, processing, completed, failed
         public DateTime CreatedAt { get; set; }
 
         public User? User { get; set; }

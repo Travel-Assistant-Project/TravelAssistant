@@ -15,10 +15,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add environment variables to configuration
 builder.Configuration.AddEnvironmentVariables();
 
-// ----------------------------------------------------
-// SERVICES
-// ----------------------------------------------------
-
 builder.Services.AddControllers();
 
 builder.Services.AddCors(options =>
@@ -35,9 +31,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ----------------------------------------------------
-// POSTGRESQL (READ FROM ENV)
-// ----------------------------------------------------
 var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
 var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "travelassistant";
 var dbUser = Environment.GetEnvironmentVariable("DB_USERNAME") ?? "postgres";
@@ -61,9 +54,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     });
 });
 
-// ----------------------------------------------------
-// JWT AUTH
-// ----------------------------------------------------
 builder.Services.AddScoped<JwtTokenService>();
 
 var secret = builder.Configuration["Jwt:Secret"]!;
@@ -82,16 +72,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ----------------------------------------------------
-// AI SERVICES
-// ----------------------------------------------------
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<SmartTripApi.Services.AI.PromptBuilder>();
 builder.Services.AddScoped<SmartTripApi.Services.AI.AIService>();
 
-// ----------------------------------------------------
-// APP PIPELINE
-// ----------------------------------------------------
+builder.Services.AddScoped<SmartTripApi.Services.GooglePlaces.GooglePlacesService>();
+builder.Services.AddScoped<SmartTripApi.Services.GooglePlaces.PlaceEnrichmentService>();
+
+// Read API keys from .env file and override appsettings
+var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+var googleApiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
+
+if (!string.IsNullOrEmpty(geminiApiKey))
+{
+    builder.Configuration["AIProviders:Gemini:ApiKey"] = geminiApiKey;
+}
+
+if (!string.IsNullOrEmpty(googleApiKey))
+{
+    builder.Configuration["GooglePlaces:ApiKey"] = googleApiKey;
+}
+
+
 var app = builder.Build();
 
 // Swagger middleware

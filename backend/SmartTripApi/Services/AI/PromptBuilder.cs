@@ -6,15 +6,30 @@ namespace SmartTripApi.Services.AI
     {
         public string BuildRoutePlanPrompt(RoutePlanRequestDto request)
         {
+            // Build comma-separated lists from arrays
+            var themes = string.Join(", ", request.GetThemeStrings());
+            var budgets = string.Join(", ", request.GetBudgetStrings());
+            var intensities = string.Join(", ", request.GetIntensityStrings());
+            var transports = string.Join(", ", request.GetTransportStrings());
+
+            // If no selections, provide defaults
+            if (string.IsNullOrEmpty(themes)) themes = "general sightseeing";
+            if (string.IsNullOrEmpty(budgets)) budgets = "medium";
+            if (string.IsNullOrEmpty(intensities)) intensities = "relaxed";
+            if (string.IsNullOrEmpty(transports)) transports = "car";
+
             return $@"Generate a detailed travel route plan in JSON format for {request.Region}.
 
 Trip Parameters:
 - Region: {request.Region}
 - Duration: {request.Days} days
-- Theme: {request.GetThemeString()}
-- Budget Level: {request.GetBudgetString()}
-- Activity Intensity: {request.GetIntensityString()}
-- Transportation Mode: {request.GetTransportString()}
+- Themes: {themes} (can mix different themes across activities)
+- Budget Level: {budgets}
+- Activity Intensity: {intensities} (can vary throughout the trip)
+- Transportation Modes: {transports} (can use different modes for different activities)
+
+IMPORTANT: When multiple themes are provided, create a diverse itinerary that includes activities from all specified themes. 
+For example, if themes are 'nature, beach, history', include some nature activities, some beach time, and some historical sites.
 
 Please respond ONLY with a valid JSON object in this EXACT format:
 {{
@@ -26,7 +41,7 @@ Please respond ONLY with a valid JSON object in this EXACT format:
         {{
           ""Title"": ""Activity title"",
           ""Description"": ""Detailed description of the activity"",
-          ""Reason"": ""Why this activity is recommended for this trip"",
+          ""Reason"": ""Why this activity is recommended for this trip (mention which theme it addresses)"",
           ""StartTime"": ""09:00"",
           ""EndTime"": ""11:00"",
           ""Place"": {{
@@ -43,14 +58,15 @@ Please respond ONLY with a valid JSON object in this EXACT format:
 
 REQUIREMENTS:
 - Generate exactly {request.Days} days
-- Include 3-4 activities per day based on {request.GetIntensityString()} intensity
-- Focus on {request.GetThemeString()} themed activities
-- Consider {request.GetBudgetString()} budget level
-- Plan transportation using {request.GetTransportString()}
+- Include 3-4 activities per day based on the specified intensity level(s)
+- DIVERSIFY activities across all selected themes: {themes}
+- Consider the budget level(s): {budgets}
+- Plan transportation using available mode(s): {transports}
 - Provide realistic time slots (HH:mm format)
 - Include specific place information for each activity
 - Make sure ALL JSON is valid and properly formatted
-- Do NOT include any markdown formatting or code blocks, ONLY the JSON object";
+- Do NOT include any markdown formatting or code blocks, ONLY the JSON object
+- IMPORTANT: Balance activities across different themes throughout the days";
         }
 
         public string BuildTripPlanPrompt(TripPlanRequest request)
