@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<PlacePhoto> PlacePhotos => Set<PlacePhoto>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<GoogleReview> GoogleReviews => Set<GoogleReview>();
+    public DbSet<Favorite> Favorites => Set<Favorite>();
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -202,6 +203,36 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.PlaceId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Favorites
+        m.Entity<Favorite>(e =>
+        {
+            e.ToTable("favorites");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.PlaceId).HasColumnName("place_id");
+            e.Property(x => x.ItineraryId).HasColumnName("itinerary_id");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Place)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Itinerary)
+                .WithMany()
+                .HasForeignKey(x => x.ItineraryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Ensure only one of PlaceId or ItineraryId is set
+            e.HasCheckConstraint("CK_Favorites_OneReference", 
+                "(place_id IS NOT NULL AND itinerary_id IS NULL) OR (place_id IS NULL AND itinerary_id IS NOT NULL)");
         });
     }
 }

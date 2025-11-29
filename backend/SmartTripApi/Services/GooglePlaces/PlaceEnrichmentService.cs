@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SmartTripApi.Data;
 using SmartTripApi.Models;
+using SmartTripApi.Helpers;
 
 namespace SmartTripApi.Services.GooglePlaces
 {
@@ -235,7 +236,7 @@ namespace SmartTripApi.Services.GooglePlaces
                         {
                             PlaceId = placeId,
                             ImageUrl = photoUrl,
-                            CreatedAt = DateTime.UtcNow
+                            CreatedAt = DateTimeHelper.GetTurkeyTime()
                         };
 
                         _context.PlacePhotos.Add(placePhoto);
@@ -283,7 +284,7 @@ namespace SmartTripApi.Services.GooglePlaces
                             ReviewTime = googleReview.Time.HasValue 
                                 ? DateTimeOffset.FromUnixTimeSeconds(googleReview.Time.Value).DateTime
                                 : null,
-                            CreatedAt = DateTime.UtcNow
+                            CreatedAt = DateTimeHelper.GetTurkeyTime()
                         };
 
                         _context.GoogleReviews.Add(review);

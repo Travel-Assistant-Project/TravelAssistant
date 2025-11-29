@@ -41,7 +41,8 @@ var dbUser = Environment.GetEnvironmentVariable("DB_USERNAME") ?? "postgres";
 var dbPass = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "";
 
 // Build connection string from environment variables
-var connectionString = $"Host={dbHost};Database={dbName};Username={dbUser};Password={dbPass}";
+// Set timezone to Turkey (UTC+3)
+var connectionString = $"Host={dbHost};Database={dbName};Username={dbUser};Password={dbPass};Timezone=Europe/Istanbul";
 
 // Map PostgreSQL enums
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);

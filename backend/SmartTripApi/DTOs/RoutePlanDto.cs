@@ -122,6 +122,28 @@ namespace SmartTripApi.DTOs
     {
         public int DayNumber { get; set; }
         public List<ActivityDetailDto> Activities { get; set; } = new();
+        public WeatherInfoDto? WeatherInfo { get; set; }
+    }
+
+    public class WeatherInfoDto
+    {
+        public WeatherTempDto? Temp { get; set; }
+        public WeatherConditionDto? Weather { get; set; }
+        public decimal? Humidity { get; set; }
+        public decimal? WindSpeed { get; set; }
+    }
+
+    public class WeatherTempDto
+    {
+        public decimal? Day { get; set; }
+        public decimal? Min { get; set; }
+        public decimal? Max { get; set; }
+    }
+
+    public class WeatherConditionDto
+    {
+        public string? Main { get; set; }
+        public string? Description { get; set; }
     }
 
     public class ActivityDetailDto
@@ -140,6 +162,10 @@ namespace SmartTripApi.DTOs
         public string? Description { get; set; }
         public string? City { get; set; }
         public string? Country { get; set; }
+        public List<string>? ImageUrls { get; set; }
+        public decimal? GoogleRating { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
     }
 
 

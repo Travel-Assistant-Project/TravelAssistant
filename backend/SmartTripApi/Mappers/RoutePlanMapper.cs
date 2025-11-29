@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SmartTripApi.DTOs;
 using SmartTripApi.Models;
 
@@ -24,19 +25,35 @@ namespace SmartTripApi.Mappers
                                 Title = a.Title,
                                 Description = a.Description ?? "",
                                 Reason = a.Reason ?? "",
-                                StartTime = a.StartTime?.ToString(@"hh\\:mm") ?? "",
-                                EndTime = a.EndTime?.ToString(@"hh\\:mm") ?? "",
+                                StartTime = a.StartTime.HasValue 
+                                    ? $"{a.StartTime.Value.Hours:D2}:{a.StartTime.Value.Minutes:D2}" 
+                                    : "",
+                                EndTime = a.EndTime.HasValue 
+                                    ? $"{a.EndTime.Value.Hours:D2}:{a.EndTime.Value.Minutes:D2}" 
+                                    : "",
                                 Place = a.Place != null
                                     ? new PlaceDetailDto
                                     {
                                         Name = a.Place.Name,
                                         Description = a.Place.Description,
                                         City = a.Place.City,
-                                        Country = a.Place.Country
+                                        Country = a.Place.Country,
+                                        ImageUrls = a.Place.PhotoUrls != null && a.Place.PhotoUrls.Length > 0
+                                            ? a.Place.PhotoUrls.ToList()
+                                            : null,
+                                        GoogleRating = a.Place.GoogleRating,
+                                        Latitude = a.Place.Latitude,
+                                        Longitude = a.Place.Longitude
                                     }
                                     : null
                             })
-                            .ToList()
+                            .ToList(),
+                        WeatherInfo = day.WeatherInfo != null 
+                            ? JsonSerializer.Deserialize<WeatherInfoDto>(day.WeatherInfo.RootElement.GetRawText(), new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            })
+                            : null
                     })
                     .ToList()
             };

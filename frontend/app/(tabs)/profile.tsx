@@ -101,7 +101,7 @@ export default function ProfileScreen() {
           </Text>
           <TouchableOpacity
             style={styles.myTripsButton}
-            onPress={() => router.push('/(tabs)')}
+            onPress={() => router.push('/(tabs)/my-trips')}
           >
             <IconSymbol name="map.fill" size={18} color="#0d9488" />
             <Text style={styles.myTripsText}>My Trips</Text>

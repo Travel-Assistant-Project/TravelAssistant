@@ -1,6 +1,5 @@
 // frontend/app/(tabs)/new-trip.tsx
-import Slider from '@react-native-community/slider';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,9 +10,11 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { api } from '@/lib/api';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 
 
@@ -24,14 +25,14 @@ export default function NewTripScreen() {
   const [country, setCountry] = useState('');
   const [days, setDays] = useState('');
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
-  const [budget, setBudget] = useState('5000');
-  const [activityLevel, setActivityLevel] = useState<'Relaxed' | 'Moderate' | 'Active' | null>(null);
-  const [transport, setTransport] = useState<'Car' | 'Walking' | 'Public Transport' | null>(null);
+  const [selectedBudgets, setSelectedBudgets] = useState<string[]>([]);
+  const [selectedIntensities, setSelectedIntensities] = useState<string[]>([]);
+  const [selectedTransports, setSelectedTransports] = useState<string[]>([]);
   const [showDaysDropdown, setShowDaysDropdown] = useState(false);
-  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const destinationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Loading messages
   const loadingMessages = [
@@ -55,87 +56,106 @@ export default function NewTripScreen() {
     };
   }, [isLoading, loadingMessages.length]);
 
-  const themes = ['Design', 'Nature', 'History', 'Food'];
-  const activityLevels: Array<'Relaxed' | 'Moderate' | 'Active'> = [
-    'Relaxed',
-    'Moderate',
-    'Active',
+  // Fetch location info from Google Places API when destination changes
+  useEffect(() => {
+    // Clear previous timeout
+    if (destinationTimeoutRef.current) {
+      clearTimeout(destinationTimeoutRef.current);
+    }
+
+    // If destination is empty, clear country and city
+    if (!destination.trim()) {
+      setCountry('');
+      return;
+    }
+
+    // Debounce API call - wait 1 second after user stops typing
+    destinationTimeoutRef.current = setTimeout(async () => {
+      if (destination.trim().length < 3) {
+        return; // Don't search for very short queries
+      }
+
+      try {
+        setIsLoadingLocation(true);
+        const response = await api.get('/api/Places/location-info', {
+          params: { destination: destination.trim() },
+        });
+
+        if (response.data) {
+          if (response.data.country) {
+            setCountry(response.data.country);
+          }
+          // Note: We don't set city here as it's extracted from destination
+          // The destination itself serves as the city/region
+        }
+      } catch (error: any) {
+        console.error('Error fetching location info:', error);
+        // Don't show error to user, just log it
+        // User can still proceed with manual selection if needed
+      } finally {
+        setIsLoadingLocation(false);
+      }
+    }, 1000);
+
+    return () => {
+      if (destinationTimeoutRef.current) {
+        clearTimeout(destinationTimeoutRef.current);
+      }
+    };
+  }, [destination]);
+
+  // Themes based on MULTI_SELECTION_GUIDE.md enum values
+  const themes = [
+    { label: 'Nature', value: 0 },
+    { label: 'Sea', value: 1 },
+    { label: 'History', value: 2 },
+    { label: 'Beach', value: 3 },
+    { label: 'Food', value: 4 },
+    { label: 'Photospot', value: 5 },
   ];
-  const transports: Array<'Car' | 'Walking' | 'Public Transport'> = [
-    'Car',
-    'Walking',
-    'Public Transport',
+
+  // Budgets based on MULTI_SELECTION_GUIDE.md enum values
+  const budgets = [
+    { label: 'Low', value: 0 },
+    { label: 'Medium', value: 1 },
+    { label: 'High', value: 2 },
   ];
 
-  // Ülke listesi (popüler ülkeler)
-  const countries = [
-    'Turkey', 'United States', 'United Kingdom', 'France', 'Germany', 'Italy', 'Spain',
-    'Greece', 'Netherlands', 'Belgium', 'Switzerland', 'Austria', 'Portugal', 'Ireland',
-    'Japan', 'South Korea', 'China', 'Thailand', 'Singapore', 'Malaysia', 'Indonesia',
-    'Australia', 'New Zealand', 'Canada', 'Mexico', 'Brazil', 'Argentina', 'Chile',
-    'Egypt', 'Morocco', 'South Africa', 'Kenya', 'United Arab Emirates', 'Saudi Arabia',
-    'India', 'Russia', 'Poland', 'Czech Republic', 'Hungary', 'Croatia', 'Norway',
-    'Sweden', 'Denmark', 'Finland', 'Iceland'
-  ].sort();
+  // Intensities based on MULTI_SELECTION_GUIDE.md enum values
+  const intensities = [
+    { label: 'Relaxed', value: 0 },
+    { label: 'Active', value: 1 },
+  ];
 
-  // Ülkelere göre şehir mapping
-  const citiesByCountry: { [key: string]: string[] } = {
-    'Turkey': ['Istanbul', 'Ankara', 'Izmir', 'Antalya', 'Bodrum', 'Kaş', 'Fethiye', 'Cappadocia', 'Pamukkale', 'Marmaris', 'Alanya', 'Side'],
-    'United States': ['New York', 'Los Angeles', 'San Francisco', 'Las Vegas', 'Miami', 'Chicago', 'Boston', 'Seattle', 'Washington DC', 'Orlando'],
-    'United Kingdom': ['London', 'Edinburgh', 'Manchester', 'Liverpool', 'Oxford', 'Cambridge', 'Bath', 'York'],
-    'France': ['Paris', 'Nice', 'Lyon', 'Marseille', 'Bordeaux', 'Cannes', 'Strasbourg', 'Toulouse'],
-    'Germany': ['Berlin', 'Munich', 'Hamburg', 'Frankfurt', 'Cologne', 'Dresden', 'Heidelberg'],
-    'Italy': ['Rome', 'Venice', 'Florence', 'Milan', 'Naples', 'Pisa', 'Verona', 'Bologna'],
-    'Spain': ['Barcelona', 'Madrid', 'Seville', 'Valencia', 'Granada', 'Bilbao', 'Malaga'],
-    'Greece': ['Athens', 'Santorini', 'Mykonos', 'Crete', 'Rhodes', 'Thessaloniki'],
-    'Netherlands': ['Amsterdam', 'Rotterdam', 'The Hague', 'Utrecht', 'Eindhoven'],
-    'Belgium': ['Brussels', 'Bruges', 'Antwerp', 'Ghent'],
-    'Switzerland': ['Zurich', 'Geneva', 'Lucerne', 'Bern', 'Interlaken'],
-    'Austria': ['Vienna', 'Salzburg', 'Innsbruck', 'Hallstatt'],
-    'Portugal': ['Lisbon', 'Porto', 'Algarve', 'Sintra', 'Coimbra'],
-    'Ireland': ['Dublin', 'Cork', 'Galway', 'Killarney'],
-    'Japan': ['Tokyo', 'Kyoto', 'Osaka', 'Hiroshima', 'Nara', 'Fukuoka'],
-    'South Korea': ['Seoul', 'Busan', 'Jeju', 'Incheon'],
-    'China': ['Beijing', 'Shanghai', 'Hong Kong', 'Guangzhou', 'Xian'],
-    'Thailand': ['Bangkok', 'Phuket', 'Chiang Mai', 'Pattaya', 'Krabi'],
-    'Singapore': ['Singapore'],
-    'Malaysia': ['Kuala Lumpur', 'Penang', 'Langkawi', 'Malacca'],
-    'Indonesia': ['Bali', 'Jakarta', 'Yogyakarta', 'Lombok'],
-    'Australia': ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide'],
-    'New Zealand': ['Auckland', 'Wellington', 'Queenstown', 'Christchurch'],
-    'Canada': ['Toronto', 'Vancouver', 'Montreal', 'Quebec City', 'Ottawa'],
-    'Mexico': ['Mexico City', 'Cancun', 'Playa del Carmen', 'Tulum', 'Guadalajara'],
-    'Brazil': ['Rio de Janeiro', 'São Paulo', 'Salvador', 'Brasilia'],
-    'Argentina': ['Buenos Aires', 'Mendoza', 'Bariloche', 'Cordoba'],
-    'Chile': ['Santiago', 'Valparaiso', 'San Pedro de Atacama'],
-    'Egypt': ['Cairo', 'Luxor', 'Aswan', 'Alexandria', 'Sharm El Sheikh'],
-    'Morocco': ['Marrakech', 'Casablanca', 'Fes', 'Rabat', 'Tangier'],
-    'South Africa': ['Cape Town', 'Johannesburg', 'Durban', 'Pretoria'],
-    'Kenya': ['Nairobi', 'Mombasa', 'Masai Mara'],
-    'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah'],
-    'Saudi Arabia': ['Riyadh', 'Jeddah', 'Mecca', 'Medina'],
-    'India': ['Mumbai', 'Delhi', 'Bangalore', 'Jaipur', 'Agra', 'Goa'],
-    'Russia': ['Moscow', 'St Petersburg', 'Kazan', 'Sochi'],
-    'Poland': ['Warsaw', 'Krakow', 'Gdansk', 'Wroclaw'],
-    'Czech Republic': ['Prague', 'Brno', 'Cesky Krumlov'],
-    'Hungary': ['Budapest', 'Debrecen', 'Eger'],
-    'Croatia': ['Zagreb', 'Dubrovnik', 'Split', 'Pula'],
-    'Norway': ['Oslo', 'Bergen', 'Tromso', 'Stavanger'],
-    'Sweden': ['Stockholm', 'Gothenburg', 'Malmo', 'Uppsala'],
-    'Denmark': ['Copenhagen', 'Aarhus', 'Odense'],
-    'Finland': ['Helsinki', 'Rovaniemi', 'Tampere'],
-    'Iceland': ['Reykjavik', 'Akureyri'],
-  };
+  // Transports based on MULTI_SELECTION_GUIDE.md enum values
+  const transports = [
+    { label: 'Car', value: 0 },
+    { label: 'Walk', value: 1 },
+    { label: 'Public Transport', value: 2 },
+  ];
 
-  // Seçilen ülkeye göre şehirleri filtrele
-  const getAvailableCities = () => {
-    if (!country) return [];
-    return citiesByCountry[country] || [];
-  };
 
   const toggleTheme = (theme: string) => {
     setSelectedThemes(prev =>
       prev.includes(theme) ? prev.filter(t => t !== theme) : [...prev, theme],
+    );
+  };
+
+  const toggleBudget = (budget: string) => {
+    setSelectedBudgets(prev =>
+      prev.includes(budget) ? prev.filter(b => b !== budget) : [...prev, budget],
+    );
+  };
+
+  const toggleIntensity = (intensity: string) => {
+    setSelectedIntensities(prev =>
+      prev.includes(intensity) ? prev.filter(i => i !== intensity) : [...prev, intensity],
+    );
+  };
+
+  const toggleTransport = (transport: string) => {
+    setSelectedTransports(prev =>
+      prev.includes(transport) ? prev.filter(t => t !== transport) : [...prev, transport],
     );
   };
 
@@ -148,7 +168,7 @@ export default function NewTripScreen() {
       return;
     }
     if (!country.trim()) {
-      Alert.alert('Error', 'Please select a country');
+      Alert.alert('Error', 'Please wait for country to be detected, or try a different destination');
       return;
     }
     if (!days) {
@@ -159,12 +179,16 @@ export default function NewTripScreen() {
       Alert.alert('Error', 'Please select at least one theme');
       return;
     }
-    if (!activityLevel) {
-      Alert.alert('Error', 'Please select activity level');
+    if (selectedBudgets.length === 0) {
+      Alert.alert('Error', 'Please select at least one budget level');
       return;
     }
-    if (!transport) {
-      Alert.alert('Error', 'Please select transport mode');
+    if (selectedIntensities.length === 0) {
+      Alert.alert('Error', 'Please select at least one intensity level');
+      return;
+    }
+    if (selectedTransports.length === 0) {
+      Alert.alert('Error', 'Please select at least one transport mode');
       return;
     }
 
@@ -172,52 +196,39 @@ export default function NewTripScreen() {
     setIsLoading(true);
 
     try {
-      // Theme mapping: frontend -> backend
-      const themeMap: { [key: string]: number } = {
-        'Design': 1,
-        'Nature': 1,
-        'History': 3,
-        'Food': 5,
-      };
-      
-      // Budget mapping (₺ to level)
-      const budgetValue = Number.parseInt(budget);
-      let budgetLevel = 1; // Low
-      if (budgetValue > 30000) budgetLevel = 3; // High
-      else if (budgetValue > 10000) budgetLevel = 2; // Medium
+      // Convert selected theme labels to enum values
+      const themeValues = selectedThemes.map(themeLabel => 
+        themes.find(t => t.label === themeLabel)?.value ?? 0
+      );
 
-      // Intensity mapping
-      const intensityMap: { [key: string]: number } = {
-        'Relaxed': 1,
-        'Moderate': 2,
-        'Active': 2,
-      };
+      // Convert selected budget labels to enum values
+      const budgetValues = selectedBudgets.map(budgetLabel => 
+        budgets.find(b => b.label === budgetLabel)?.value ?? 1
+      );
 
-      // Transport mapping
-      const transportMap: { [key: string]: number } = {
-        'Car': 1,
-        'Walking': 2,
-        'Public Transport': 3,
-      };
+      // Convert selected intensity labels to enum values
+      const intensityValues = selectedIntensities.map(intensityLabel => 
+        intensities.find(i => i.label === intensityLabel)?.value ?? 0
+      );
 
-      // Backend isteği
-      console.log('Sending request to backend:', {
+      // Convert selected transport labels to enum values
+      const transportValues = selectedTransports.map(transportLabel => 
+        transports.find(t => t.label === transportLabel)?.value ?? 0
+      );
+
+      // Backend request with proper parameter order (as per MULTI_SELECTION_GUIDE.md)
+      const requestBody = {
         region: destination,
         days: Number.parseInt(days),
-        theme: themeMap[selectedThemes[0]] || 1,
-        budget: budgetLevel,
-        intensity: intensityMap[activityLevel] || 1,
-        transport: transportMap[transport] || 1,
-      });
+        themes: themeValues,
+        budgets: budgetValues,
+        intensities: intensityValues,
+        transports: transportValues,
+      };
 
-      const response = await api.post('/api/Routes/plan', {
-        region: destination,
-        days: Number.parseInt(days),
-        theme: themeMap[selectedThemes[0]] || 1,
-        budget: budgetLevel,
-        intensity: intensityMap[activityLevel] || 1,
-        transport: transportMap[transport] || 1,
-      });
+      console.log('Sending request to backend:', requestBody);
+
+      const response = await api.post('/api/Routes/plan', requestBody);
 
       console.log('Backend response:', response.data);
       
@@ -266,43 +277,58 @@ export default function NewTripScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Plan Your Trip</Text>
-          <Text style={styles.headerSubtitle}>Create your perfect trip itinerary</Text>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Plan Your Trip</Text>
+            <Text style={styles.headerSubtitle}>Create your perfect trip itinerary</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.refreshButton}
+            onPress={() => {
+              // Reset form
+              setDestination('');
+              setCountry('');
+              setDays('');
+              setSelectedThemes([]);
+              setSelectedBudgets([]);
+              setSelectedIntensities([]);
+              setSelectedTransports([]);
+            }}
+          >
+            <IconSymbol name="arrow.clockwise" size={20} color="#0d9488" />
+          </TouchableOpacity>
         </View>
 
-        {/* Country */}
+        {/* City / Region / Destination */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Destination</Text>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter destination (e.g., Istanbul, Paris, New York)"
+              placeholderTextColor="#9ca3af"
+              value={destination}
+              onChangeText={setDestination}
+            />
+            {isLoadingLocation && (
+              <ActivityIndicator size="small" color="#0d9488" style={styles.inputLoader} />
+            )}
+          </View>
+          {destination && !isLoadingLocation && (
+            <Text style={styles.hintText}>
+              {country ? `Detected: ${country}` : 'Searching location...'}
+            </Text>
+          )}
+        </View>
+
+        {/* Country - Auto-filled from Google API */}
         <View style={styles.field}>
           <Text style={styles.label}>Country</Text>
-          <TouchableOpacity
-            style={styles.select}
-            onPress={() => setShowCountryDropdown(true)}
-          >
+          <View style={[styles.select, styles.selectReadOnly]}>
             <Text style={[styles.selectText, !country && styles.placeholderText]}>
-              {country || 'Select country'}
+              {country || 'Will be detected from destination'}
             </Text>
-            <Text style={styles.selectIcon}>˅</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* City / Region */}
-        <View style={styles.field}>
-          <Text style={styles.label}>City / Region</Text>
-          <TouchableOpacity
-            style={[styles.select, !country && styles.selectDisabled]}
-            onPress={() => {
-              if (country) {
-                setShowCityDropdown(true);
-              } else {
-                Alert.alert('Please select a country first');
-              }
-            }}
-            disabled={!country}
-          >
-            <Text style={[styles.selectText, !destination && styles.placeholderText]}>
-              {destination || (country ? 'Select city' : 'Select country first')}
-            </Text>
-            <Text style={styles.selectIcon}>˅</Text>
-          </TouchableOpacity>
+            {country && <Text style={styles.checkIcon}>✓</Text>}
+          </View>
         </View>
 
         {/* Days */}
@@ -318,77 +344,6 @@ export default function NewTripScreen() {
             <Text style={styles.selectIcon}>˅</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Country Modal */}
-        <Modal visible={showCountryDropdown} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBoxLarge}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalHeaderText}>Select Country</Text>
-              </View>
-              <ScrollView style={styles.modalScroll}>
-                {countries.map(c => (
-                  <TouchableOpacity
-                    key={c}
-                    style={styles.modalItem}
-                    onPress={() => {
-                      setCountry(c);
-                      setDestination(''); // Ülke değiştiğinde şehri sıfırla
-                      setShowCountryDropdown(false);
-                    }}
-                  >
-                    <Text style={styles.modalItemText}>{c}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowCountryDropdown(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        {/* City Modal */}
-        <Modal visible={showCityDropdown} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBoxLarge}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalHeaderText}>Select City in {country}</Text>
-              </View>
-              <ScrollView style={styles.modalScroll}>
-                {getAvailableCities().length > 0 ? (
-                  getAvailableCities().map(c => (
-                    <TouchableOpacity
-                      key={c}
-                      style={styles.modalItem}
-                      onPress={() => {
-                        setDestination(c);
-                        setShowCityDropdown(false);
-                      }}
-                    >
-                      <Text style={styles.modalItemText}>{c}</Text>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <View style={styles.modalItem}>
-                    <Text style={[styles.modalItemText, { color: '#9ca3af' }]}>
-                      No cities available for {country}
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowCityDropdown(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
 
         {/* Days Modal */}
         <Modal visible={showDaysDropdown} transparent animationType="fade">
@@ -423,18 +378,18 @@ export default function NewTripScreen() {
 
         {/* Themes */}
         <View style={styles.field}>
-          <Text style={styles.label}>Select themes</Text>
+          <Text style={styles.label}>Select themes (multiple allowed)</Text>
           <View style={styles.chipRow}>
             {themes.map(theme => {
-              const active = selectedThemes.includes(theme);
+              const active = selectedThemes.includes(theme.label);
               return (
                 <TouchableOpacity
-                  key={theme}
-                  onPress={() => toggleTheme(theme)}
+                  key={theme.value}
+                  onPress={() => toggleTheme(theme.label)}
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {theme}
+                    {theme.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -442,43 +397,42 @@ export default function NewTripScreen() {
           </View>
         </View>
 
-       {/* Budget */}
-<View style={styles.field}>
-  <Text style={styles.label}>Budget (₺)</Text>
-
-  <View style={{ marginTop: 8 }}>
-    <Slider
-      minimumValue={0}
-      maximumValue={100000}      // İstersen bunu artırabiliriz
-      step={100}                // 100 TL artışlarla
-      value={Number(budget)}
-      onValueChange={(v) => setBudget(String(Math.floor(v)))}
-      minimumTrackTintColor="#0d9488"
-      maximumTrackTintColor="#a7f3d0"
-      thumbTintColor="#0d9488"
-    />
-
-    <Text style={styles.budgetValue}>
-      {budget} ₺
-    </Text>
-  </View>
-</View>
-
-
-        {/* Activity Level */}
+        {/* Budget */}
         <View style={styles.field}>
-          <Text style={styles.label}>Activity level</Text>
+          <Text style={styles.label}>Budget (multiple allowed)</Text>
           <View style={styles.chipRow}>
-            {activityLevels.map(level => {
-              const active = activityLevel === level;
+            {budgets.map(budget => {
+              const active = selectedBudgets.includes(budget.label);
               return (
                 <TouchableOpacity
-                  key={level}
-                  onPress={() => setActivityLevel(level)}
+                  key={budget.value}
+                  onPress={() => toggleBudget(budget.label)}
                   style={[styles.chipWide, active && styles.chipActive]}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {level}
+                    {budget.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+
+        {/* Activity Level (Intensity) */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Activity level (multiple allowed)</Text>
+          <View style={styles.chipRow}>
+            {intensities.map(intensity => {
+              const active = selectedIntensities.includes(intensity.label);
+              return (
+                <TouchableOpacity
+                  key={intensity.value}
+                  onPress={() => toggleIntensity(intensity.label)}
+                  style={[styles.chipWide, active && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {intensity.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -488,18 +442,18 @@ export default function NewTripScreen() {
 
         {/* Transport */}
         <View style={styles.field}>
-          <Text style={styles.label}>Transport</Text>
+          <Text style={styles.label}>Transport (multiple allowed)</Text>
           <View style={styles.chipRow}>
-            {transports.map(t => {
-              const active = transport === t;
+            {transports.map(transport => {
+              const active = selectedTransports.includes(transport.label);
               return (
                 <TouchableOpacity
-                  key={t}
-                  onPress={() => setTransport(t)}
+                  key={transport.value}
+                  onPress={() => toggleTransport(transport.label)}
                   style={[styles.chipWide, active && styles.chipActive]}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {t}
+                    {transport.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -558,6 +512,12 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 32,
     paddingTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  headerContent: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 32,
@@ -570,6 +530,15 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '400',
   },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
   field: {
     marginBottom: 24,
   },
@@ -579,7 +548,13 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 10,
   },
+  inputContainer: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   input: {
+    flex: 1,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -588,6 +563,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+  },
+  inputLoader: {
+    position: 'absolute',
+    right: 16,
+  },
+  hintText: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#0d9488',
+    fontStyle: 'italic',
+  },
+  selectReadOnly: {
+    backgroundColor: '#f9fafb',
+    borderColor: '#d1d5db',
+  },
+  checkIcon: {
+    fontSize: 18,
+    color: '#10b981',
+    fontWeight: 'bold',
   },
   select: {
     borderRadius: 12,
