@@ -121,5 +121,30 @@ namespace SmartTripApi.DTOs
 
         [JsonPropertyName("user_ratings_total")]
         public int? UserRatingsTotal { get; set; }
+
+        [JsonPropertyName("address_components")]
+        public List<GoogleAddressComponent>? AddressComponents { get; set; }
+
+        [JsonPropertyName("formatted_address")]
+        public string? FormattedAddress { get; set; }
+    }
+
+    public class GoogleAddressComponent
+    {
+        [JsonPropertyName("long_name")]
+        public string LongName { get; set; } = string.Empty;
+
+        [JsonPropertyName("short_name")]
+        public string ShortName { get; set; } = string.Empty;
+
+        [JsonPropertyName("types")]
+        public List<string> Types { get; set; } = new();
+    }
+
+    public class LocationInfoDto
+    {
+        public string? Country { get; set; }
+        public string? City { get; set; }
+        public string? FormattedAddress { get; set; }
     }
 }

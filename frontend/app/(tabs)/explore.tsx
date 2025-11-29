@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { api } from '@/lib/api';
 
 interface Category {
   id: string;
@@ -18,178 +20,79 @@ interface Category {
 }
 
 interface Destination {
-  id: string;
+  id: number;
   name: string;
   location: string;
-  rating: number;
-  image: string;
-  category: string;
+  rating: number | null;
+  image: string | null;
+  category: string | null;
 }
 
 export default function ExploreScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const categories: Category[] = [
     { id: '1', name: 'All', icon: '🌍' },
     { id: '2', name: 'Nature', icon: '🌲' },
-    { id: '3', name: 'Culture', icon: '🎭' },
+    { id: '3', name: 'History', icon: '🎭' },
     { id: '4', name: 'Beach', icon: '🏖️' },
-    { id: '5', name: 'Gastronomy', icon: '🍽️' },
-    { id: '6', name: 'Photography', icon: '📸' },
-    { id: '7', name: 'Mountain', icon: '⛰️' },
-    { id: '8', name: 'Historical', icon: '🏛️' },
+    { id: '5', name: 'Food', icon: '🍽️' },
+    { id: '6', name: 'Photospot', icon: '📸' },
+    { id: '7', name: 'Sea', icon: '⛰️' },
   ];
 
-  const destinations: Destination[] = [
-    // Beach
-    {
-      id: '1',
-      name: 'Kaputaş Beach',
-      location: 'Antalya, Turkey',
-      rating: 4.8,
-      image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
-      category: 'Beach',
-    },
-    {
-      id: '2',
-      name: 'Ölüdeniz',
-      location: 'Muğla, Turkey',
-      rating: 4.8,
-      image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19',
-      category: 'Beach',
-    },
-    {
-      id: '3',
-      name: 'Patara Beach',
-      location: 'Antalya, Turkey',
-      rating: 4.7,
-      image: 'https://images.unsplash.com/photo-1519046904884-53103b34b206',
-      category: 'Beach',
-    },
-    
-    // Nature
-    {
-      id: '4',
-      name: 'Cappadocia',
-      location: 'Nevşehir, Turkey',
-      rating: 4.9,
-      image: 'https://images.unsplash.com/photo-1609137144813-7d9921338f24',
-      category: 'Nature',
-    },
-    {
-      id: '5',
-      name: 'Pamukkale',
-      location: 'Denizli, Turkey',
-      rating: 4.7,
-      image: 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200',
-      category: 'Nature',
-    },
-    {
-      id: '6',
-      name: 'Butterfly Valley',
-      location: 'Muğla, Turkey',
-      rating: 4.6,
-      image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470',
-      category: 'Nature',
-    },
-    
-    // Culture
-    {
-      id: '7',
-      name: 'Hagia Sophia',
-      location: 'Istanbul, Turkey',
-      rating: 4.9,
-      image: 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200',
-      category: 'Culture',
-    },
-    {
-      id: '8',
-      name: 'Whirling Dervishes',
-      location: 'Konya, Turkey',
-      rating: 4.8,
-      image: 'https://images.unsplash.com/photo-1578632292335-df3abbb0d586',
-      category: 'Culture',
-    },
-    
-    // Gastronomy
-    {
-      id: '9',
-      name: 'Spice Bazaar',
-      location: 'Istanbul, Turkey',
-      rating: 4.7,
-      image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
-      category: 'Gastronomy',
-    },
-    {
-      id: '10',
-      name: 'Karaköy Food Tour',
-      location: 'Istanbul, Turkey',
-      rating: 4.8,
-      image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836',
-      category: 'Gastronomy',
-    },
-    
-    // Photography
-    {
-      id: '11',
-      name: 'Hot Air Balloons',
-      location: 'Cappadocia, Turkey',
-      rating: 5.0,
-      image: 'https://images.unsplash.com/photo-1609137144813-7d9921338f24',
-      category: 'Photography',
-    },
-    {
-      id: '12',
-      name: 'Blue Mosque',
-      location: 'Istanbul, Turkey',
-      rating: 4.9,
-      image: 'https://images.unsplash.com/photo-1578632292335-df3abbb0d586',
-      category: 'Photography',
-    },
-    
-    // Mountain
-    {
-      id: '13',
-      name: 'Mount Nemrut',
-      location: 'Adıyaman, Turkey',
-      rating: 4.6,
-      image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4',
-      category: 'Mountain',
-    },
-    {
-      id: '14',
-      name: 'Uludağ',
-      location: 'Bursa, Turkey',
-      rating: 4.5,
-      image: 'https://images.unsplash.com/photo-1551632811-561732d1e306',
-      category: 'Mountain',
-    },
-    
-    // Historical
-    {
-      id: '15',
-      name: 'Ephesus',
-      location: 'İzmir, Turkey',
-      rating: 4.9,
-      image: 'https://images.unsplash.com/photo-1541963463532-d68292c34b19',
-      category: 'Historical',
-    },
-    {
-      id: '16',
-      name: 'Troy Ancient City',
-      location: 'Çanakkale, Turkey',
-      rating: 4.6,
-      image: 'https://images.unsplash.com/photo-1581801959971-e8d60d7c0b5a',
-      category: 'Historical',
-    },
-  ];
+  useEffect(() => {
+    fetchPlaces();
+  }, [selectedCategory]);
 
+  const fetchPlaces = async () => {
+    try {
+      setIsLoading(true);
+      // Category'yi lowercase'e çevir (backend enum'lar lowercase)
+      const categoryParam = selectedCategory === 'All' 
+        ? null 
+        : selectedCategory.toLowerCase();
+      
+      console.log('Fetching places with category:', categoryParam);
+      
+      const response = await api.get('/api/Places/explore', {
+        params: {
+          category: categoryParam,
+          limit: 30,
+        },
+      });
+      
+      console.log('Places response:', response.data);
+      
+      const places: Destination[] = response.data.map((place: any) => ({
+        id: place.id,
+        name: place.name,
+        location: place.location || `${place.city || ''}, ${place.country || ''}`.trim() || 'Unknown location',
+        rating: place.googleRating || null,
+        image: place.imageUrls && place.imageUrls.length > 0 ? place.imageUrls[0] : null,
+        category: place.category ? place.category.charAt(0).toUpperCase() + place.category.slice(1).toLowerCase() : null,
+      }));
+      
+      console.log('Mapped places:', places);
+      setDestinations(places);
+    } catch (error: any) {
+      console.error('Error fetching places:', error);
+      console.error('Error response:', error.response?.data);
+      setDestinations([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Sadece search query'ye göre filtrele (category zaten API'de filtrelenmiş)
   const filteredDestinations = destinations.filter((dest) => {
-    const matchesCategory = selectedCategory === 'All' || dest.category === selectedCategory;
-    const matchesSearch = dest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         dest.location.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    if (searchQuery.trim() === '') return true;
+    const queryLower = searchQuery.toLowerCase();
+    return dest.name.toLowerCase().includes(queryLower) ||
+           dest.location.toLowerCase().includes(queryLower);
   });
 
   return (
@@ -231,7 +134,9 @@ export default function ExploreScreen() {
                 styles.categoryChip,
                 selectedCategory === category.name && styles.categoryChipActive,
               ]}
-              onPress={() => setSelectedCategory(category.name)}
+              onPress={() => {
+                setSelectedCategory(category.name);
+              }}
             >
               <Text style={styles.categoryIcon}>{category.icon}</Text>
               <Text
@@ -252,29 +157,56 @@ export default function ExploreScreen() {
         </Text>
 
         {/* Destination Cards */}
-        <View style={styles.cardsContainer}>
-          {filteredDestinations.map((destination) => (
-            <TouchableOpacity key={destination.id} style={styles.card}>
-              <Image
-                source={{ uri: destination.image }}
-                style={styles.cardImage}
-                resizeMode="cover"
-              />
-              <View style={styles.cardOverlay}>
-                <View style={styles.ratingBadge}>
-                  <Text style={styles.ratingText}>⭐ {destination.rating}</Text>
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0d9488" />
+            <Text style={styles.loadingText}>Loading places...</Text>
+          </View>
+        )}
+        {!isLoading && filteredDestinations.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <IconSymbol name="map" size={48} color="#d1d5db" />
+            <Text style={styles.emptyText}>No places found</Text>
+            <Text style={styles.emptySubtext}>
+              {selectedCategory === 'All' 
+                ? 'Try searching for a specific place'
+                : `No places found in ${selectedCategory} category. Try creating a trip with ${selectedCategory} theme to see places here.`}
+            </Text>
+          </View>
+        )}
+        {!isLoading && filteredDestinations.length > 0 && (
+          <View style={styles.cardsContainer}>
+            {filteredDestinations.map((destination) => (
+              <TouchableOpacity key={destination.id} style={styles.card}>
+                {destination.image ? (
+                  <Image
+                    source={{ uri: destination.image }}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.cardImagePlaceholder}>
+                    <IconSymbol name="photo" size={32} color="#999999" />
+                  </View>
+                )}
+                <View style={styles.cardOverlay}>
+                  {destination.rating && (
+                    <View style={styles.ratingBadge}>
+                      <Text style={styles.ratingText}>⭐ {destination.rating.toFixed(1)}</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardTitle}>{destination.name}</Text>
-                <View style={styles.locationRow}>
-                  <IconSymbol name="mappin" size={14} color="#666666" />
-                  <Text style={styles.cardLocation}>{destination.location}</Text>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle}>{destination.name}</Text>
+                  <View style={styles.locationRow}>
+                    <IconSymbol name="mappin" size={14} color="#666666" />
+                    <Text style={styles.cardLocation}>{destination.location}</Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -408,5 +340,40 @@ const styles = StyleSheet.create({
   cardLocation: {
     fontSize: 14,
     color: '#666666',
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666666',
+  },
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666666',
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999999',
+    textAlign: 'center',
+  },
+  cardImagePlaceholder: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

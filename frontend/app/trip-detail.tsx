@@ -31,12 +31,29 @@ interface Activity {
     country?: string;
     imageUrls?: string[];
     googleRating?: number;
+    latitude?: number;
+    longitude?: number;
   } | null;
+}
+
+interface WeatherInfo {
+  temp?: {
+    day?: number;
+    min?: number;
+    max?: number;
+  };
+  weather?: {
+    main?: string;
+    description?: string;
+  };
+  humidity?: number;
+  windSpeed?: number;
 }
 
 interface DayPlan {
   dayNumber: number;
   activities: Activity[];
+  weatherInfo?: WeatherInfo;
 }
 
 interface TripData {
@@ -66,7 +83,13 @@ export default function TripDetailScreen() {
     try {
       console.log('Fetching trip details for ID:', itineraryId);
       const response = await api.get(`/api/Routes/${itineraryId}`);
-      console.log('Trip details response:', response.data);
+      console.log('Trip details response:', JSON.stringify(response.data, null, 2));
+      console.log('Days array:', response.data?.days);
+      if (response.data?.days && response.data.days.length > 0) {
+        console.log('Day 1 data:', response.data.days[0]);
+        console.log('Day 1 weatherInfo:', response.data.days[0]?.weatherInfo);
+        console.log('Day 1 weatherInfo type:', typeof response.data.days[0]?.weatherInfo);
+      }
       setTripData(response.data);
       setIsLoading(false);
     } catch (error: any) {
@@ -79,7 +102,12 @@ export default function TripDetailScreen() {
 
   const getCurrentDayData = () => {
     if (!tripData) return null;
-    return tripData.days.find(d => d.dayNumber === selectedDay);
+    const day = tripData.days.find(d => d.dayNumber === selectedDay);
+    if (day) {
+      console.log(`Day ${selectedDay} data:`, day);
+      console.log(`Day ${selectedDay} weatherInfo:`, day.weatherInfo);
+    }
+    return day;
   };
 
   const formatTime = (time: string) => {
@@ -114,6 +142,59 @@ export default function TripDetailScreen() {
   }
 
   const currentDay = getCurrentDayData();
+
+  // Map için koordinatları hesapla
+  const getMapRegion = () => {
+    if (!currentDay?.activities || currentDay.activities.length === 0) {
+      return {
+        latitude: 36.201667,
+        longitude: 29.645556,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
+      };
+    }
+
+    // Koordinatları olan activity'leri filtrele
+    const activitiesWithCoords = currentDay.activities.filter(
+      (a) => a.place?.latitude != null && a.place?.longitude != null
+    );
+
+    if (activitiesWithCoords.length === 0) {
+      // Koordinat yoksa default değer
+      return {
+        latitude: 36.201667,
+        longitude: 29.645556,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
+      };
+    }
+
+    // Tüm koordinatların min/max değerlerini bul
+    const latitudes = activitiesWithCoords.map((a) => a.place?.latitude ?? 0);
+    const longitudes = activitiesWithCoords.map((a) => a.place?.longitude ?? 0);
+
+    const minLat = Math.min(...latitudes);
+    const maxLat = Math.max(...latitudes);
+    const minLng = Math.min(...longitudes);
+    const maxLng = Math.max(...longitudes);
+
+    // Merkez noktası
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    // Delta değerleri (padding ekle)
+    const latDelta = Math.max((maxLat - minLat) * 1.5, 0.01);
+    const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.01);
+
+    return {
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    };
+  };
+
+  const mapRegion = getMapRegion();
 
   return (
     <View style={styles.root}>
@@ -253,7 +334,17 @@ export default function TripDetailScreen() {
         <View style={[styles.mapModalContainer, { paddingTop: insets.top }]}>
           {/* Map Header */}
           <View style={styles.mapHeader}>
-            <Text style={styles.mapDayTitle}>Day {selectedDay}</Text>
+            <View style={styles.mapHeaderLeft}>
+              <Text style={styles.mapDayTitle}>Day {selectedDay}</Text>
+              {currentDay?.weatherInfo && (
+                <View style={styles.mapWeatherBadge}>
+                  <IconSymbol name="cloud.sun.fill" size={14} color="#0d9488" />
+                  <Text style={styles.mapWeatherBadgeText}>
+                    {currentDay.weatherInfo.temp?.day ? `${Math.round(currentDay.weatherInfo.temp.day)}°` : '—'}
+                  </Text>
+                </View>
+              )}
+            </View>
             <TouchableOpacity 
               onPress={() => {
                 console.log('Close button pressed');
@@ -267,43 +358,119 @@ export default function TripDetailScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Weather Info Card - Map Modal içinde */}
+          {currentDay?.weatherInfo && (
+            <View style={styles.mapWeatherCard}>
+              <View style={styles.mapWeatherHeader}>
+                <View style={styles.mapWeatherTitleRow}>
+                  <IconSymbol name="cloud.sun.fill" size={20} color="#0d9488" />
+                  <Text style={styles.mapWeatherTitle}>Weather Info</Text>
+                </View>
+              </View>
+              
+              <View style={styles.mapWeatherContent}>
+                {/* Temperature Row */}
+                {currentDay.weatherInfo.temp && (
+                  <View style={styles.mapWeatherTempRow}>
+                    {currentDay.weatherInfo.temp.day !== undefined && (
+                      <View style={styles.mapWeatherTempItem}>
+                        <Text style={styles.mapWeatherTempValue}>
+                          {Math.round(currentDay.weatherInfo.temp.day)}°
+                        </Text>
+                        <Text style={styles.mapWeatherTempLabel}>Average</Text>
+                      </View>
+                    )}
+                    {currentDay.weatherInfo.temp.min !== undefined && (
+                      <View style={styles.mapWeatherTempItem}>
+                        <Text style={styles.mapWeatherTempValue}>
+                          {Math.round(currentDay.weatherInfo.temp.min)}°
+                        </Text>
+                        <Text style={styles.mapWeatherTempLabel}>Min</Text>
+                      </View>
+                    )}
+                    {currentDay.weatherInfo.temp.max !== undefined && (
+                      <View style={styles.mapWeatherTempItem}>
+                        <Text style={styles.mapWeatherTempValue}>
+                          {Math.round(currentDay.weatherInfo.temp.max)}°
+                        </Text>
+                        <Text style={styles.mapWeatherTempLabel}>Max</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Weather Details */}
+                <View style={styles.mapWeatherDetails}>
+                  {currentDay.weatherInfo.weather && (
+                    <View style={styles.mapWeatherDetailItem}>
+                      <IconSymbol name="cloud" size={16} color="#6b7280" />
+                      <Text style={styles.mapWeatherDetailText} numberOfLines={1}>
+                        {currentDay.weatherInfo.weather.main || currentDay.weatherInfo.weather.description || 'N/A'}
+                      </Text>
+                    </View>
+                  )}
+                  {currentDay.weatherInfo.humidity !== undefined && (
+                    <View style={styles.mapWeatherDetailItem}>
+                      <IconSymbol name="drop.fill" size={16} color="#6b7280" />
+                      <Text style={styles.mapWeatherDetailText}>
+                        {Math.round(currentDay.weatherInfo.humidity)}%
+                      </Text>
+                    </View>
+                  )}
+                  {currentDay.weatherInfo.windSpeed !== undefined && (
+                    <View style={styles.mapWeatherDetailItem}>
+                      <IconSymbol name="wind" size={16} color="#6b7280" />
+                      <Text style={styles.mapWeatherDetailText}>
+                        {Math.round(currentDay.weatherInfo.windSpeed)} km/h
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Map */}
           <MapView
             style={styles.map}
             provider={PROVIDER_GOOGLE}
-            initialRegion={{
-              latitude: 36.201667, // Default to Turkey/Kaş region, will be dynamic later
-              longitude: 29.645556,
-              latitudeDelta: 0.15,
-              longitudeDelta: 0.15,
-            }}
+            initialRegion={mapRegion}
+            region={mapRegion}
           >
             {/* Activity Markers */}
-            {currentDay?.activities.map((activity, index) => (
-              <Marker
-                key={index}
-                coordinate={{
-                  latitude: 36.201667 + (index * 0.02), // Temporary: will use real coordinates
-                  longitude: 29.645556 + (index * 0.02),
-                }}
-                title={activity.place?.name || activity.title}
-                description={activity.description}
-              >
-                <View style={styles.markerContainer}>
-                  <View style={styles.marker}>
-                    <Text style={styles.markerText}>{index + 1}</Text>
-                  </View>
-                </View>
-              </Marker>
-            ))}
+            {currentDay?.activities
+              .filter((activity) => activity.place?.latitude != null && activity.place?.longitude != null)
+              .map((activity, index) => {
+                const lat = activity.place?.latitude ?? 0;
+                const lng = activity.place?.longitude ?? 0;
+                return (
+                  <Marker
+                    key={index}
+                    coordinate={{
+                      latitude: lat,
+                      longitude: lng,
+                    }}
+                    title={activity.place?.name || activity.title}
+                    description={activity.description}
+                  >
+                    <View style={styles.markerContainer}>
+                      <View style={styles.marker}>
+                        <Text style={styles.markerText}>{index + 1}</Text>
+                      </View>
+                    </View>
+                  </Marker>
+                );
+              })}
 
             {/* Route Line */}
             {currentDay && currentDay.activities.length > 1 && (
               <Polyline
-                coordinates={currentDay.activities.map((_, index) => ({
-                  latitude: 36.201667 + (index * 0.02),
-                  longitude: 29.645556 + (index * 0.02),
-                }))}
+                coordinates={currentDay.activities
+                  .filter((activity) => activity.place?.latitude != null && activity.place?.longitude != null)
+                  .map((activity) => ({
+                    latitude: activity.place?.latitude ?? 0,
+                    longitude: activity.place?.longitude ?? 0,
+                  }))}
                 strokeColor="#0d9488"
                 strokeWidth={3}
               />
@@ -338,6 +505,7 @@ export default function TripDetailScreen() {
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }
@@ -625,10 +793,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  mapHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   mapDayTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#222222',
+  },
+  mapWeatherBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F0F9FB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  mapWeatherBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0d9488',
   },
   closeButton: {
     width: 40,
@@ -720,6 +907,82 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 12,
     marginLeft: 12,
+  },
+  // Weather Card Styles - Map Modal içinde
+  mapWeatherCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  mapWeatherHeader: {
+    marginBottom: 12,
+  },
+  mapWeatherTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mapWeatherTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222222',
+  },
+  mapWeatherContent: {
+    gap: 12,
+  },
+  mapWeatherTempRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 16,
+    backgroundColor: '#F0F9FB',
+    borderRadius: 12,
+    gap: 8,
+  },
+  mapWeatherTempItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  mapWeatherTempValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0d9488',
+    marginBottom: 4,
+  },
+  mapWeatherTempLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  mapWeatherDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 12,
+    paddingTop: 8,
+  },
+  mapWeatherDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  mapWeatherDetailText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
   },
 });
 

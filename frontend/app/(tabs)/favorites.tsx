@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { api } from '@/lib/api';
@@ -16,7 +15,6 @@ interface Trip {
   intensity: number;
   transport: number;
   isAiGenerated: boolean;
-  isFavorite: boolean;
   createdAt: string;
 }
 
@@ -28,13 +26,8 @@ export default function FavoritesScreen() {
   const fetchFavorites = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/Routes/user');
-      const allTrips: Trip[] = response.data;
-
-      const stored = await AsyncStorage.getItem('favoriteTripIds');
-      const favoriteIds: number[] = stored ? JSON.parse(stored) : [];
-
-      setTrips(allTrips.filter(t => favoriteIds.includes(t.id)));
+      const response = await api.get('/api/Favorites/itineraries');
+      setTrips(response.data);
     } catch (error) {
       console.error('Error fetching favorites:', error);
     } finally {
@@ -64,17 +57,21 @@ export default function FavoritesScreen() {
         </TouchableOpacity>
       </View>
 
-      {isLoading ? (
+      {isLoading && (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#0d9488" />
         </View>
-      ) : trips.length === 0 ? (
+      )}
+
+      {!isLoading && trips.length === 0 && (
         <View style={styles.center}>
           <IconSymbol name="heart" size={36} color="#d1d5db" />
           <Text style={styles.emptyText}>No favorites yet</Text>
           <Text style={styles.emptySubtext}>Tap the heart on a trip in Home to add it here.</Text>
         </View>
-      ) : (
+      )}
+
+      {!isLoading && trips.length > 0 && (
         <ScrollView contentContainerStyle={styles.list}>
           {trips.map((trip, index) => {
             const colors = ['#FFB6C1', '#B4E7CE', '#97D8FF', '#D8B389'];

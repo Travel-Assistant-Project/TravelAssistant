@@ -60,6 +60,12 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="my-trips"
+        options={{
+          href: null, // Tab bar'da gösterme
+        }}
+      />
     </Tabs>
   );
 }

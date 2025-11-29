@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartTripApi.Data;
 using SmartTripApi.Services;
 using SmartTripApi.DTOs;
+using SmartTripApi.Helpers;
 
 namespace SmartTripApi.Controllers;
 
@@ -33,7 +34,7 @@ public class AuthController : ControllerBase
             Age = dto.Age ?? 0,
             Country = dto.Country ?? string.Empty,
             City = dto.City ?? string.Empty,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTimeHelper.GetTurkeyTime()
         };
 
         _db.Add(user);

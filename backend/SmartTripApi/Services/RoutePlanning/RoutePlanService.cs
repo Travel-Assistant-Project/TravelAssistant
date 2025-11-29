@@ -7,6 +7,7 @@ using SmartTripApi.Services.AI;
 using SmartTripApi.Services.GooglePlaces;
 using SmartTripApi.Services.Weather;
 using SmartTripApi.Mappers;
+using SmartTripApi.Helpers;
 
 namespace SmartTripApi.Services.RoutePlanning
 {
@@ -66,7 +67,7 @@ namespace SmartTripApi.Services.RoutePlanning
                     UserId = userId,
                     RequestPayload = JsonDocument.Parse(requestPayloadJson),
                     Status = "pending",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTimeHelper.GetTurkeyTime()
                 };
 
                 _context.AIRequests.Add(aiRequest);
@@ -102,7 +103,7 @@ namespace SmartTripApi.Services.RoutePlanning
                         : null,
                     IsAiGenerated = true,
                     Status = "pending",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTimeHelper.GetTurkeyTime()
                 };
 
                 _context.Itineraries.Add(itinerary);
@@ -120,7 +121,7 @@ namespace SmartTripApi.Services.RoutePlanning
                     {
                         ItineraryId = itinerary.Id,
                         DayNumber = aiDay.DayNumber,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTimeHelper.GetTurkeyTime()
                     };
 
                     _context.ItineraryDays.Add(itineraryDay);
@@ -130,67 +131,87 @@ namespace SmartTripApi.Services.RoutePlanning
 
                     foreach (var aiActivity in aiDay.Activities)
                     {
-                        // Place bul / oluştur
-                        Place? place = null;
-                        if (aiActivity.Place != null && !string.IsNullOrEmpty(aiActivity.Place.Name))
+                        try
                         {
-                            place = await _context.Places
-                                .FirstOrDefaultAsync(p =>
-                                    p.Name == aiActivity.Place.Name &&
-                                    p.City == aiActivity.Place.City);
-
-                            if (place == null)
+                            // Place bul / oluştur
+                            Place? place = null;
+                            if (aiActivity.Place != null && !string.IsNullOrEmpty(aiActivity.Place.Name))
                             {
-                                place = new Place
+                                place = await _context.Places
+                                    .FirstOrDefaultAsync(p =>
+                                        p.Name == aiActivity.Place.Name &&
+                                        p.City == aiActivity.Place.City);
+
+                                if (place == null)
                                 {
-                                    Name = aiActivity.Place.Name,
-                                    Description = aiActivity.Place.Description,
-                                    City = aiActivity.Place.City ?? request.Region,
-                                    Country = aiActivity.Place.Country ?? "Turkey",
-                                    Category = primaryTheme.HasValue
-                                        ? ConvertToThemeEnum(primaryTheme.Value.ToString().ToLower())
-                                        : null,
-                                    CreatedAt = DateTime.UtcNow
-                                };
+                                    place = new Place
+                                    {
+                                        Name = aiActivity.Place.Name,
+                                        Description = aiActivity.Place.Description,
+                                        City = aiActivity.Place.City ?? request.Region,
+                                        Country = aiActivity.Place.Country ?? "Turkey",
+                                        Category = primaryTheme.HasValue
+                                            ? ConvertToThemeEnum(primaryTheme.Value.ToString().ToLower())
+                                            : null,
+                                        CreatedAt = DateTimeHelper.GetTurkeyTime()
+                                    };
 
-                                _context.Places.Add(place);
-                                await _context.SaveChangesAsync();
-                            }
-                        }
-
-                        // Activity
-                        var activity = new Models.Activity
-                        {
-                            ItineraryDayId = itineraryDay.Id,
-                            PlaceId = place?.Id,
-                            Title = aiActivity.Title,
-                            Description = aiActivity.Description,
-                            Reason = aiActivity.Reason,
-                            StartTime = ParseTimeString(aiActivity.StartTime),
-                            EndTime = ParseTimeString(aiActivity.EndTime),
-                            CreatedAt = DateTime.UtcNow
-                        };
-
-                        _context.Activities.Add(activity);
-                        await _context.SaveChangesAsync();
-
-                        dayActivities.Add(new ActivityDetailDto
-                        {
-                            Title = activity.Title,
-                            Description = activity.Description ?? "",
-                            Reason = activity.Reason ?? "",
-                            StartTime = aiActivity.StartTime,
-                            EndTime = aiActivity.EndTime,
-                            Place = place != null
-                                ? new PlaceDetailDto
-                                {
-                                    Name = place.Name,
-                                    Description = place.Description,
-                                    City = place.City,
-                                    Country = place.Country
+                                    _context.Places.Add(place);
+                                    await _context.SaveChangesAsync();
                                 }
-                                : null
-                        });
+                            }
+
+                            // Parse time strings safely
+                            var startTime = ParseTimeString(aiActivity.StartTime ?? "");
+                            var endTime = ParseTimeString(aiActivity.EndTime ?? "");
+
+                            // Activity
+                            var activity = new Models.Activity
+                            {
+                                ItineraryDayId = itineraryDay.Id,
+                                PlaceId = place?.Id,
+                                Title = aiActivity.Title ?? "Untitled Activity",
+                                Description = aiActivity.Description ?? "",
+                                Reason = aiActivity.Reason ?? "",
+                                StartTime = startTime,
+                                EndTime = endTime,
+                                CreatedAt = DateTimeHelper.GetTurkeyTime()
+                            };
+
+                            _context.Activities.Add(activity);
+                            await _context.SaveChangesAsync();
+
+                            dayActivities.Add(new ActivityDetailDto
+                            {
+                                Title = activity.Title,
+                                Description = activity.Description ?? "",
+                                Reason = activity.Reason ?? "",
+                                StartTime = aiActivity.StartTime ?? "",
+                                EndTime = aiActivity.EndTime ?? "",
+                                Place = place != null
+                                    ? new PlaceDetailDto
+                                    {
+                                        Name = place.Name,
+                                        Description = place.Description,
+                                        City = place.City,
+                                        Country = place.Country,
+                                        ImageUrls = place.PhotoUrls != null && place.PhotoUrls.Length > 0
+                                            ? place.PhotoUrls.ToList()
+                                            : null,
+                                        GoogleRating = place.GoogleRating,
+                                        Latitude = place.Latitude,
+                                        Longitude = place.Longitude
+                                    }
+                                    : null
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, 
+                                "Error processing activity '{ActivityTitle}' for day {DayNumber}. Skipping this activity.", 
+                                aiActivity.Title ?? "Unknown", aiDay.DayNumber);
+                            // Continue with next activity instead of failing entire request
+                        }
                     }
 
                     responseDays.Add(new DayDetailDto
@@ -303,10 +324,59 @@ namespace SmartTripApi.Services.RoutePlanning
 
         private TimeSpan? ParseTimeString(string timeString)
         {
+            if (string.IsNullOrWhiteSpace(timeString))
+                return null;
+
+            // Temizle - whitespace ve özel karakterleri kaldır
+            timeString = timeString.Trim()
+                .Replace(" ", "")
+                .Replace("\t", "")
+                .Replace("\n", "")
+                .Replace("\r", "");
+
             if (string.IsNullOrEmpty(timeString))
                 return null;
 
-            return TimeSpan.TryParse(timeString, out var time) ? time : null;
+            try
+            {
+                // Önce standart TimeSpan.TryParse dene (InvariantCulture ile)
+                if (TimeSpan.TryParse(timeString, System.Globalization.CultureInfo.InvariantCulture, out var time))
+                    return time;
+
+                // "HH:mm" formatında deneme (örn: "09:00", "14:30")
+                var formats = new[] { "HH:mm", "H:mm", "hh:mm", "h:mm", "HH:mm:ss", "H:mm:ss", "h:mm tt", "hh:mm tt" };
+                
+                foreach (var format in formats)
+                {
+                    if (DateTime.TryParseExact(timeString, format, 
+                        System.Globalization.CultureInfo.InvariantCulture, 
+                        System.Globalization.DateTimeStyles.None, 
+                        out var dateTime))
+                    {
+                        return dateTime.TimeOfDay;
+                    }
+                }
+
+                // Manuel parse denemesi (örn: "9:00" -> 9 saat, 0 dakika)
+                var parts = timeString.Split(':');
+                if (parts.Length >= 2 && 
+                    int.TryParse(parts[0], out var hours) && 
+                    int.TryParse(parts[1], out var minutes))
+                {
+                    if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60)
+                    {
+                        return new TimeSpan(hours, minutes, 0);
+                    }
+                }
+
+                _logger.LogWarning("Could not parse time string: {TimeString}", timeString);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error parsing time string: {TimeString}", timeString);
+                return null;
+            }
         }
 
         private ThemeTypeEnum? ConvertToThemeEnum(string theme) =>
