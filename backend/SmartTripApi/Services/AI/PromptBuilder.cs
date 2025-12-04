@@ -28,6 +28,11 @@ Trip Parameters:
 - Activity Intensity: {intensities} (can vary throughout the trip)
 - Transportation Modes: {transports} (can use different modes for different activities)
 
+CRITICAL LOCATION REQUIREMENT:
+ALL activities and places MUST be located within {request.Region} or its immediate surroundings.
+Do NOT suggest places from other cities or distant locations.
+Only recommend locations that are actually in or very close to {request.Region}.
+
 IMPORTANT: When multiple themes are provided, create a diverse itinerary that includes activities from all specified themes. 
 For example, if themes are 'nature, beach, history', include some nature activities, some beach time, and some historical sites.
 
@@ -64,6 +69,8 @@ REQUIREMENTS:
 - Plan transportation using available mode(s): {transports}
 - Provide realistic time slots (HH:mm format)
 - Include specific place information for each activity
+- ALL places must be actually located in {request.Region} - do not suggest places from other cities
+- Ensure the City field always matches {request.Region}
 - Make sure ALL JSON is valid and properly formatted
 - Do NOT include any markdown formatting or code blocks, ONLY the JSON object
 - IMPORTANT: Balance activities across different themes throughout the days";

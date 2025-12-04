@@ -239,5 +239,44 @@ namespace SmartTripApi.Services.GooglePlaces
                 FormattedAddress = placeDetails.FormattedAddress
             };
         }
+
+        /// <summary>
+        /// Get directions between two places
+        /// </summary>
+        public async Task<GoogleDirectionsResponse?> GetDirectionsAsync(string originPlaceId, string destinationPlaceId, string mode = "transit")
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_apiKey))
+                {
+                    _logger.LogWarning("Google Places API key is not configured");
+                    return null;
+                }
+
+                var url = $"https://maps.googleapis.com/maps/api/directions/json?origin=place_id:{originPlaceId}&destination=place_id:{destinationPlaceId}&mode={mode}&key={_apiKey}";
+
+                _logger.LogInformation("Fetching directions from {Origin} to {Destination} with mode {Mode}",
+                    originPlaceId, destinationPlaceId, mode);
+
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<GoogleDirectionsResponse>(content);
+
+                if (result?.Status != "OK")
+                {
+                    _logger.LogWarning("Failed to get directions. Status: {Status}", result?.Status);
+                    return null;
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting directions from {Origin} to {Destination}", originPlaceId, destinationPlaceId);
+                return null;
+            }
+        }
     }
 }

@@ -154,6 +154,13 @@ namespace SmartTripApi.DTOs
         public string StartTime { get; set; } = string.Empty;
         public string EndTime { get; set; } = string.Empty;
         public PlaceDetailDto? Place { get; set; }
+
+        // Transport info
+        public string? TravelFromPreviousMode { get; set; }
+        public int? TravelFromPreviousDurationMinutes { get; set; }
+        public int? TravelFromPreviousDistanceMeters { get; set; }
+        public object? TravelFromPreviousDetails { get; set; }
+        public string? TravelFromPreviousPolyline { get; set; }
     }
 
     public class PlaceDetailDto

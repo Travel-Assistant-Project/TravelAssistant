@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<GoogleReview> GoogleReviews => Set<GoogleReview>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
+    public DbSet<ActivityTransport> ActivityTransports => Set<ActivityTransport>();
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -114,6 +115,13 @@ public class AppDbContext : DbContext
             e.Property(x => x.EndTime).HasColumnName("end_time");
             e.Property(x => x.ImageUrls).HasColumnName("image_urls");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            // Transport info
+            e.Property(x => x.TravelFromPreviousMode).HasColumnName("travel_from_previous_mode");
+            e.Property(x => x.TravelFromPreviousDurationMinutes).HasColumnName("travel_from_previous_duration_minutes");
+            e.Property(x => x.TravelFromPreviousDistanceMeters).HasColumnName("travel_from_previous_distance_meters");
+            e.Property(x => x.TravelFromPreviousDetailsJson).HasColumnName("travel_from_previous_details_json").HasColumnType("jsonb");
+            e.Property(x => x.TravelFromPreviousPolyline).HasColumnName("travel_from_previous_polyline");
 
             e.HasOne(x => x.ItineraryDay)
                 .WithMany(d => d.Activities)
@@ -233,6 +241,25 @@ public class AppDbContext : DbContext
             // Ensure only one of PlaceId or ItineraryId is set
             e.HasCheckConstraint("CK_Favorites_OneReference", 
                 "(place_id IS NOT NULL AND itinerary_id IS NULL) OR (place_id IS NULL AND itinerary_id IS NOT NULL)");
+        });
+
+        // Activity Transports
+        m.Entity<ActivityTransport>(e =>
+        {
+            e.ToTable("activity_transports");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ActivityId).HasColumnName("activity_id");
+            e.Property(x => x.Mode).HasColumnName("mode");
+            e.Property(x => x.DurationMinutes).HasColumnName("duration_minutes");
+            e.Property(x => x.DistanceMeters).HasColumnName("distance_meters");
+            e.Property(x => x.PolylinePoints).HasColumnName("polyline_points");
+            e.Property(x => x.DetailsJson).HasColumnName("details").HasColumnType("jsonb");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.Activity)
+                .WithOne(a => a.Transport)
+                .HasForeignKey<ActivityTransport>(x => x.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

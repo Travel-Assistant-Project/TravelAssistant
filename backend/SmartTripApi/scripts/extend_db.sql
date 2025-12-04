@@ -36,3 +36,39 @@ CREATE INDEX IF NOT EXISTS idx_google_reviews_created_at ON google_reviews(creat
 CREATE INDEX IF NOT EXISTS idx_google_reviews_rating ON google_reviews(rating);
 
 
+--30.11.2025
+-- Add transport columns to activities table
+ALTER TABLE activities
+ADD COLUMN IF NOT EXISTS travel_from_previous_mode VARCHAR(50),
+ADD COLUMN IF NOT EXISTS travel_from_previous_duration_minutes INT,
+ADD COLUMN IF NOT EXISTS travel_from_previous_distance_meters INT,
+ADD COLUMN IF NOT EXISTS travel_from_previous_details_json JSONB;
+
+ALTER TABLE activities
+ADD COLUMN IF NOT EXISTS travel_from_previous_polyline TEXT;
+
+-- Create new table for detailed transport info
+CREATE TABLE IF NOT EXISTS activity_transports (
+    id SERIAL PRIMARY KEY,
+    activity_id INT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+    
+    -- Transport Mode (walking, driving, transit)
+    mode VARCHAR(50) NOT NULL,
+    
+    -- Summary Data
+    duration_minutes INT,
+    distance_meters INT,
+    
+    -- Visualization Data
+    polyline_points TEXT, -- For drawing route on map
+    
+    -- Detailed Steps (JSONB for storing complex step data)
+    -- Contains: instructions, transit_lines, departure_times, etc.
+    details JSONB,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_activity_transports_activity_id ON activity_transports(activity_id);
+

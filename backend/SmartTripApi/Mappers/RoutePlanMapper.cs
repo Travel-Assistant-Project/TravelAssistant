@@ -45,7 +45,17 @@ namespace SmartTripApi.Mappers
                                         Latitude = a.Place.Latitude,
                                         Longitude = a.Place.Longitude
                                     }
-                                    : null
+                                    : null,
+                                // Prefer new Transport table, fallback to legacy fields
+                                TravelFromPreviousMode = a.Transport?.Mode ?? a.TravelFromPreviousMode,
+                                TravelFromPreviousDurationMinutes = a.Transport?.DurationMinutes ?? a.TravelFromPreviousDurationMinutes,
+                                TravelFromPreviousDistanceMeters = a.Transport?.DistanceMeters ?? a.TravelFromPreviousDistanceMeters,
+                                TravelFromPreviousDetails = !string.IsNullOrEmpty(a.Transport?.DetailsJson)
+                                    ? JsonSerializer.Deserialize<object>(a.Transport.DetailsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                                    : (!string.IsNullOrEmpty(a.TravelFromPreviousDetailsJson) 
+                                        ? JsonSerializer.Deserialize<object>(a.TravelFromPreviousDetailsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                                        : null),
+                                TravelFromPreviousPolyline = a.Transport?.PolylinePoints ?? a.TravelFromPreviousPolyline
                             })
                             .ToList(),
                         WeatherInfo = day.WeatherInfo != null 
