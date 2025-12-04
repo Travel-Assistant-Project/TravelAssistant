@@ -16,6 +16,7 @@ namespace SmartTripApi.Services.RoutePlanning
         private readonly AppDbContext _context;
         private readonly AIService _aiService;
         private readonly PlaceEnrichmentService _placeEnrichmentService;
+        private readonly TransportEnrichmentService _transportEnrichmentService; // New Service
         private readonly IWeatherService _weatherService;
         private readonly ILogger<RoutePlanService> _logger;
 
@@ -23,12 +24,14 @@ namespace SmartTripApi.Services.RoutePlanning
             AppDbContext context,
             AIService aiService,
             PlaceEnrichmentService placeEnrichmentService,
+            TransportEnrichmentService transportEnrichmentService, // Inject here
             IWeatherService weatherService,
             ILogger<RoutePlanService> logger)
         {
             _context = context;
             _aiService = aiService;
             _placeEnrichmentService = placeEnrichmentService;
+            _transportEnrichmentService = transportEnrichmentService; // Assign
             _weatherService = weatherService;
             _logger = logger;
         }
@@ -242,6 +245,17 @@ namespace SmartTripApi.Services.RoutePlanning
 
                     await _placeEnrichmentService.EnrichItineraryPlacesAsync(itinerary.Id);
                     await _weatherService.UpdateItineraryWeatherAsync(itinerary.Id);
+                    
+                    // Transport Enrichment
+                    try 
+                    {
+                        await _transportEnrichmentService.EnrichItineraryTransportAsync(itinerary.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error enriching transport for itinerary {ItineraryId}", itinerary.Id);
+                        // Don't fail the whole process if transport enrichment fails
+                    }
 
                     itinerary.Status = "completed";
                     await _context.SaveChangesAsync();
