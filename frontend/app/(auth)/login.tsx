@@ -1,40 +1,67 @@
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Dimensions, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  TextInput,
+  Dimensions,
+  Alert,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useState } from "react";
+import { login } from "../../services/auth"; // 🔥 Doğru import
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleLogin = () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+  const handleLogin = async () => {
+    try {
+      if (!email || !password) {
+        Alert.alert("Error", "Please fill in all fields");
+        return;
+      }
+
+      // Clear old token before login
+      console.log("[LOGIN] Clearing old token...");
+      await AsyncStorage.removeItem("accessToken");
+
+      // 🔥 Backend login
+      const result = await login({ email, password });
+      console.log("Login success:", result);
+
+      // 🔥 Başarılı ise tablara yönlendir
+      router.replace("/(tabs)");
+
+    } catch (err: any) {
+      console.log("Login error:", err?.response?.data ?? err.message);
+
+      Alert.alert(
+        "Login Failed",
+        err?.response?.data?.message ?? err.message ?? "Unknown error"
+      );
     }
-    
-    // TODO: Add actual login logic here
-    console.log('Login attempt:', { email, password });
-    
-    // For now, navigate to tabs on any login attempt
-    router.replace('/(tabs)');
   };
 
   const goToRegister = () => {
-    router.push('./register');
+    router.push("./register");
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      
+
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Welcome Back!</Text>
-          <Text style={styles.subtitle}>Sign in to continue your journey</Text>
+          <Text style={styles.subtitle}>
+            Sign in to continue your journey
+          </Text>
         </View>
 
         <View style={styles.form}>
@@ -81,30 +108,31 @@ export default function LoginScreen() {
   );
 }
 
+// ---- Styles ----
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   content: {
     flex: 1,
     paddingHorizontal: 30,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 50,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333333',
+    fontWeight: "bold",
+    color: "#333333",
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
+    color: "#666666",
+    textAlign: "center",
   },
   form: {
     marginBottom: 30,
@@ -113,51 +141,51 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   input: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: "#F8F9FA",
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderRadius: 12,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: "#E9ECEF",
   },
   loginButton: {
-    backgroundColor: '#5C9B9B',
+    backgroundColor: "#5C9B9B",
     paddingVertical: 16,
     borderRadius: 12,
     marginTop: 20,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
   },
   loginButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
   forgotPassword: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
   },
   forgotPasswordText: {
-    color: '#5C9B9B',
+    color: "#5C9B9B",
     fontSize: 16,
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
   },
   footerText: {
     fontSize: 16,
-    color: '#666666',
+    color: "#666666",
   },
   signUpText: {
     fontSize: 16,
-    color: '#5C9B9B',
-    fontWeight: '600',
+    color: "#5C9B9B",
+    fontWeight: "600",
   },
 });

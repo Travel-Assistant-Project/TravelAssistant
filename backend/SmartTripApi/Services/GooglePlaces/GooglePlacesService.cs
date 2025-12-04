@@ -152,5 +152,92 @@ namespace SmartTripApi.Services.GooglePlaces
                 return null;
             }
         }
+
+        /// <summary>
+        /// Get place details with address components for location extraction
+        /// </summary>
+        public async Task<GooglePlaceDetailsResult?> GetPlaceDetailsWithAddressAsync(string placeId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_apiKey))
+                {
+                    _logger.LogWarning("Google Places API key is not configured");
+                    return null;
+                }
+
+                // Request address_components and formatted_address
+                var fields = "address_components,formatted_address";
+                var url = $"https://maps.googleapis.com/maps/api/place/details/json?place_id={placeId}&fields={fields}&key={_apiKey}";
+
+                _logger.LogInformation("Fetching place details with address for place_id: {PlaceId}", placeId);
+
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<GooglePlaceDetailsResponse>(content);
+
+                if (result?.Status != "OK")
+                {
+                    _logger.LogWarning("Failed to get place details for {PlaceId}. Status: {Status}", 
+                        placeId, result?.Status);
+                    return null;
+                }
+
+                return result.Result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting place details with address for: {PlaceId}", placeId);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extract country and city from address components
+        /// </summary>
+        public LocationInfoDto? ExtractLocationInfo(GooglePlaceDetailsResult? placeDetails)
+        {
+            if (placeDetails?.AddressComponents == null || !placeDetails.AddressComponents.Any())
+            {
+                return null;
+            }
+
+            string? country = null;
+            string? city = null;
+
+            foreach (var component in placeDetails.AddressComponents)
+            {
+                // Country extraction
+                if (component.Types.Contains("country"))
+                {
+                    country = component.LongName;
+                }
+
+                // City extraction - try different types
+                if (component.Types.Contains("locality"))
+                {
+                    city = component.LongName;
+                }
+                else if (city == null && component.Types.Contains("administrative_area_level_1"))
+                {
+                    // Fallback to state/province if no city found
+                    city = component.LongName;
+                }
+                else if (city == null && component.Types.Contains("administrative_area_level_2"))
+                {
+                    // Fallback to county if no city found
+                    city = component.LongName;
+                }
+            }
+
+            return new LocationInfoDto
+            {
+                Country = country,
+                City = city,
+                FormattedAddress = placeDetails.FormattedAddress
+            };
+        }
     }
 }

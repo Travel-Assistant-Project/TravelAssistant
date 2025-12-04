@@ -1,112 +1,379 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { api } from '@/lib/api';
 
-export default function TabTwoScreen() {
+interface Category {
+  id: string;
+  name: string;
+  icon: string;
+}
+
+interface Destination {
+  id: number;
+  name: string;
+  location: string;
+  rating: number | null;
+  image: string | null;
+  category: string | null;
+}
+
+export default function ExploreScreen() {
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const categories: Category[] = [
+    { id: '1', name: 'All', icon: '🌍' },
+    { id: '2', name: 'Nature', icon: '🌲' },
+    { id: '3', name: 'History', icon: '🎭' },
+    { id: '4', name: 'Beach', icon: '🏖️' },
+    { id: '5', name: 'Food', icon: '🍽️' },
+    { id: '6', name: 'Photospot', icon: '📸' },
+    { id: '7', name: 'Sea', icon: '⛰️' },
+  ];
+
+  useEffect(() => {
+    fetchPlaces();
+  }, [selectedCategory]);
+
+  const fetchPlaces = async () => {
+    try {
+      setIsLoading(true);
+      // Category'yi lowercase'e çevir (backend enum'lar lowercase)
+      const categoryParam = selectedCategory === 'All' 
+        ? null 
+        : selectedCategory.toLowerCase();
+      
+      console.log('Fetching places with category:', categoryParam);
+      
+      const response = await api.get('/api/Places/explore', {
+        params: {
+          category: categoryParam,
+          limit: 30,
+        },
+      });
+      
+      console.log('Places response:', response.data);
+      
+      const places: Destination[] = response.data.map((place: any) => ({
+        id: place.id,
+        name: place.name,
+        location: place.location || `${place.city || ''}, ${place.country || ''}`.trim() || 'Unknown location',
+        rating: place.googleRating || null,
+        image: place.imageUrls && place.imageUrls.length > 0 ? place.imageUrls[0] : null,
+        category: place.category ? place.category.charAt(0).toUpperCase() + place.category.slice(1).toLowerCase() : null,
+      }));
+      
+      console.log('Mapped places:', places);
+      setDestinations(places);
+    } catch (error: any) {
+      console.error('Error fetching places:', error);
+      console.error('Error response:', error.response?.data);
+      setDestinations([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Sadece search query'ye göre filtrele (category zaten API'de filtrelenmiş)
+  const filteredDestinations = destinations.filter((dest) => {
+    if (searchQuery.trim() === '') return true;
+    const queryLower = searchQuery.toLowerCase();
+    return dest.name.toLowerCase().includes(queryLower) ||
+           dest.location.toLowerCase().includes(queryLower);
+  });
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Explore</Text>
+          <Text style={styles.subtitle}>Discover amazing destinations</Text>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <IconSymbol name="magnifyingglass" size={18} color="#8E8E8F" />
+          <TextInput
+            placeholder="Search destinations..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <IconSymbol name="xmark.circle.fill" size={18} color="#8E8E8F" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Categories */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesContainer}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryChip,
+                selectedCategory === category.name && styles.categoryChipActive,
+              ]}
+              onPress={() => {
+                setSelectedCategory(category.name);
+              }}
+            >
+              <Text style={styles.categoryIcon}>{category.icon}</Text>
+              <Text
+                style={[
+                  styles.categoryText,
+                  selectedCategory === category.name && styles.categoryTextActive,
+                ]}
+              >
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Results Count */}
+        <Text style={styles.resultsText}>
+          {filteredDestinations.length} {filteredDestinations.length === 1 ? 'place' : 'places'} found
+        </Text>
+
+        {/* Destination Cards */}
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0d9488" />
+            <Text style={styles.loadingText}>Loading places...</Text>
+          </View>
+        )}
+        {!isLoading && filteredDestinations.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <IconSymbol name="map" size={48} color="#d1d5db" />
+            <Text style={styles.emptyText}>No places found</Text>
+            <Text style={styles.emptySubtext}>
+              {selectedCategory === 'All' 
+                ? 'Try searching for a specific place'
+                : `No places found in ${selectedCategory} category. Try creating a trip with ${selectedCategory} theme to see places here.`}
+            </Text>
+          </View>
+        )}
+        {!isLoading && filteredDestinations.length > 0 && (
+          <View style={styles.cardsContainer}>
+            {filteredDestinations.map((destination) => (
+              <TouchableOpacity key={destination.id} style={styles.card}>
+                {destination.image ? (
+                  <Image
+                    source={{ uri: destination.image }}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.cardImagePlaceholder}>
+                    <IconSymbol name="photo" size={32} color="#999999" />
+                  </View>
+                )}
+                <View style={styles.cardOverlay}>
+                  {destination.rating && (
+                    <View style={styles.ratingBadge}>
+                      <Text style={styles.ratingText}>⭐ {destination.rating.toFixed(1)}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle}>{destination.name}</Text>
+                  <View style={styles.locationRow}>
+                    <IconSymbol name="mappin" size={14} color="#666666" />
+                    <Text style={styles.cardLocation}>{destination.location}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#222222',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#777777',
+  },
+  searchContainer: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    backgroundColor: '#F5F5F7',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginHorizontal: 24,
+    marginBottom: 20,
+  },
+  searchInput: {
+    marginLeft: 8,
+    flex: 1,
+    fontSize: 15,
+    color: '#222222',
+  },
+  categoriesContainer: {
+    marginBottom: 16,
+  },
+  categoriesContent: {
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F7',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  categoryChipActive: {
+    backgroundColor: '#0d9488',
+  },
+  categoryIcon: {
+    fontSize: 16,
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4A4A4A',
+  },
+  categoryTextActive: {
+    color: '#FFFFFF',
+  },
+  resultsText: {
+    fontSize: 14,
+    color: '#777777',
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  cardsContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardImage: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#E5E5EA',
+  },
+  cardOverlay: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  ratingBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ratingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#222222',
+  },
+  cardInfo: {
+    padding: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#222222',
+    marginBottom: 6,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardLocation: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666666',
+  },
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666666',
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999999',
+    textAlign: 'center',
+  },
+  cardImagePlaceholder: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
