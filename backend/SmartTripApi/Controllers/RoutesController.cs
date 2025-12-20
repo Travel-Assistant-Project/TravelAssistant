@@ -37,7 +37,6 @@ namespace SmartTripApi.Controllers
         public async Task<ActionResult<RoutePlanResponseDto>> CreateRoutePlan(
             [FromBody] RoutePlanRequestDto request)
         {
-
             var userId = User.GetUserId();
             if (userId is null)
                 return Unauthorized(new { message = "Invalid user token" });
@@ -46,6 +45,7 @@ namespace SmartTripApi.Controllers
 
             if (!result.Success)
                 return StatusCode(result.StatusCode, new { message = result.ErrorMessage });
+
             return Ok(result.Data);
         }
 
@@ -76,7 +76,9 @@ namespace SmartTripApi.Controllers
             return Ok(routes);
         }
 
-        // EnrichExistingPlacesWithReviews SERVİSE TAŞINABİLİR 
+        // -------------------------------
+        //      UNIQUE VERSION OF METHOD
+        // -------------------------------
 
         [HttpPost("enrich-reviews")]
         [Authorize]
@@ -106,10 +108,8 @@ namespace SmartTripApi.Controllers
                     try
                     {
                         var success = await _placeEnrichmentService.EnrichPlaceReviewsAsync(place.Id);
-                        if (success)
-                            successCount++;
-                        else
-                            failCount++;
+                        if (success) successCount++;
+                        else failCount++;
                     }
                     catch (Exception ex)
                     {
@@ -122,63 +122,6 @@ namespace SmartTripApi.Controllers
 
                 return Ok(new
                 {
-                    message = "Review enrichment completed",
-                    totalPlaces = placesNeedingReviews.Count,
-                    successCount,
-                    failCount
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during review enrichment");
-                return StatusCode(500, new { message = "Failed to enrich reviews", error = ex.Message });
-            }
-        }
-
-        
-        [HttpPost("enrich-reviews")]
-        [Authorize]
-        public async Task<ActionResult> EnrichExistingPlacesWithReviews()
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                {
-                    return Unauthorized(new { message = "Invalid user token" });
-                }
-
-                // Find places that have google_place_id but no reviews
-                var placesNeedingReviews = await _context.Places
-                    .Where(p => !string.IsNullOrEmpty(p.GooglePlaceId))
-                    .Where(p => !_context.GoogleReviews.Any(gr => gr.PlaceId == p.Id))
-                    .ToListAsync();
-
-                _logger.LogInformation("Found {Count} places needing review enrichment", placesNeedingReviews.Count);
-
-                int successCount = 0;
-                int failCount = 0;
-
-                foreach (var place in placesNeedingReviews)
-                {
-                    try
-                    {
-                        var success = await _placeEnrichmentService.EnrichPlaceReviewsAsync(place.Id);
-                        if (success)
-                            successCount++;
-                        else
-                            failCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failCount++;
-                        _logger.LogError(ex, "Failed to enrich reviews for place {PlaceId} ({PlaceName})", 
-                            place.Id, place.Name);
-                    }
-                }
-
-                return Ok(new 
-                { 
                     message = "Review enrichment completed",
                     totalPlaces = placesNeedingReviews.Count,
                     successCount,
