@@ -147,4 +147,114 @@ namespace SmartTripApi.DTOs
         public string? City { get; set; }
         public string? FormattedAddress { get; set; }
     }
+
+    // --- Directions API Models ---
+
+    public class GoogleDirectionsResponse
+    {
+        [JsonPropertyName("routes")]
+        public List<GoogleDirectionRoute> Routes { get; set; } = new();
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = string.Empty;
+    }
+
+    public class GoogleDirectionRoute
+    {
+        [JsonPropertyName("legs")]
+        public List<GoogleDirectionLeg> Legs { get; set; } = new();
+        
+        [JsonPropertyName("overview_polyline")]
+        public GooglePolyline? OverviewPolyline { get; set; }
+    }
+
+    public class GoogleDirectionLeg
+    {
+        [JsonPropertyName("distance")]
+        public GoogleTextValue? Distance { get; set; }
+
+        [JsonPropertyName("duration")]
+        public GoogleTextValue? Duration { get; set; }
+
+        [JsonPropertyName("steps")]
+        public List<GoogleDirectionStep> Steps { get; set; } = new();
+    }
+
+    public class GoogleDirectionStep
+    {
+        [JsonPropertyName("distance")]
+        public GoogleTextValue? Distance { get; set; }
+
+        [JsonPropertyName("duration")]
+        public GoogleTextValue? Duration { get; set; }
+
+        [JsonPropertyName("html_instructions")]
+        public string HtmlInstructions { get; set; } = string.Empty;
+
+        [JsonPropertyName("travel_mode")]
+        public string TravelMode { get; set; } = string.Empty;
+
+        [JsonPropertyName("transit_details")]
+        public GoogleTransitDetails? TransitDetails { get; set; }
+        
+        [JsonPropertyName("polyline")]
+        public GooglePolyline? Polyline { get; set; }
+    }
+
+    public class GoogleTransitDetails
+    {
+        [JsonPropertyName("line")]
+        public GoogleTransitLine? Line { get; set; }
+
+        [JsonPropertyName("num_stops")]
+        public int NumStops { get; set; }
+        
+        [JsonPropertyName("departure_stop")]
+        public GoogleTransitStop? DepartureStop { get; set; }
+        
+        [JsonPropertyName("arrival_stop")]
+        public GoogleTransitStop? ArrivalStop { get; set; }
+    }
+
+    public class GoogleTransitLine
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+        
+        [JsonPropertyName("short_name")]
+        public string ShortName { get; set; } = string.Empty;
+
+        [JsonPropertyName("vehicle")]
+        public GoogleTransitVehicle? Vehicle { get; set; }
+    }
+
+    public class GoogleTransitVehicle
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = string.Empty;
+    }
+    
+    public class GoogleTransitStop
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class GoogleTextValue
+    {
+        [JsonPropertyName("text")]
+        public string Text { get; set; } = string.Empty;
+
+        [JsonPropertyName("value")]
+        public int Value { get; set; }
+    }
+    
+    public class GooglePolyline
+    {
+        [JsonPropertyName("points")]
+        public string Points { get; set; } = string.Empty;
+    }
 }

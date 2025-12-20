@@ -1,5 +1,4 @@
-// frontend/app/trip-detail.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,12 +10,16 @@ import {
   Modal,
   Dimensions,
   StatusBar,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { api } from '@/lib/api';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+
+const { width, height } = Dimensions.get('window');
 
 interface Activity {
   title: string;
@@ -34,6 +37,12 @@ interface Activity {
     latitude?: number;
     longitude?: number;
   } | null;
+  // Transport fields from backend
+  travelFromPreviousMode?: string;
+  travelFromPreviousDurationMinutes?: number;
+  travelFromPreviousDistanceMeters?: number;
+  travelFromPreviousDetails?: any;
+  travelFromPreviousPolyline?: string; // Encoded polyline
 }
 
 interface WeatherInfo {
@@ -45,6 +54,7 @@ interface WeatherInfo {
   weather?: {
     main?: string;
     description?: string;
+    icon?: string;
   };
   humidity?: number;
   windSpeed?: number;
@@ -64,55 +74,195 @@ interface TripData {
   days: DayPlan[];
 }
 
+const BOTTOM_SHEET_MIN_HEIGHT = height * 0.35;
+const BOTTOM_SHEET_MAX_HEIGHT = height * 0.8;
+
 export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const itineraryId = params.itineraryId as string;
   const insets = useSafeAreaInsets();
+  const mapRef = useRef<MapView>(null);
 
   const [tripData, setTripData] = useState<TripData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(1);
   const [showMapModal, setShowMapModal] = useState(false);
 
+  // --- Map Modal Bottom Sheet Logic ---
+  const panY = useRef(new Animated.Value(0)).current;
+  const [sheetHeight, setSheetHeight] = useState(BOTTOM_SHEET_MIN_HEIGHT);
+  
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gestureState) => {
+         // Simplified move logic
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 50) {
+          // Dragged down -> Minimize
+           Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: false,
+          }).start();
+          setSheetHeight(BOTTOM_SHEET_MIN_HEIGHT);
+        } else if (gestureState.dy < -50) {
+          // Dragged up -> Maximize
+           Animated.spring(panY, {
+            toValue: 0, 
+            useNativeDriver: false,
+          }).start();
+          setSheetHeight(BOTTOM_SHEET_MAX_HEIGHT);
+        }
+      },
+    })
+  ).current;
+
   useEffect(() => {
     fetchTripDetails();
   }, []);
 
+  useEffect(() => {
+     // Refocus map when modal opens or day changes
+     if (showMapModal && tripData) {
+        setTimeout(() => {
+            const region = getMapRegion();
+            mapRef.current?.animateToRegion(region, 1000);
+        }, 500); // Small delay for modal animation
+     }
+  }, [showMapModal, selectedDay, tripData, sheetHeight]);
+
   const fetchTripDetails = async () => {
     try {
-      console.log('Fetching trip details for ID:', itineraryId);
       const response = await api.get(`/api/Routes/${itineraryId}`);
-      console.log('Trip details response:', JSON.stringify(response.data, null, 2));
-      console.log('Days array:', response.data?.days);
-      if (response.data?.days && response.data.days.length > 0) {
-        console.log('Day 1 data:', response.data.days[0]);
-        console.log('Day 1 weatherInfo:', response.data.days[0]?.weatherInfo);
-        console.log('Day 1 weatherInfo type:', typeof response.data.days[0]?.weatherInfo);
-      }
       setTripData(response.data);
       setIsLoading(false);
     } catch (error: any) {
       console.error('Error fetching trip details:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       setIsLoading(false);
     }
   };
 
   const getCurrentDayData = () => {
     if (!tripData) return null;
-    const day = tripData.days.find(d => d.dayNumber === selectedDay);
-    if (day) {
-      console.log(`Day ${selectedDay} data:`, day);
-      console.log(`Day ${selectedDay} weatherInfo:`, day.weatherInfo);
-    }
-    return day;
+    return tripData.days.find(d => d.dayNumber === selectedDay);
   };
 
-  const formatTime = (time: string) => {
-    // "09:00" formatında geliyorsa direkt göster
-    return time;
+  const formatTime = (time: string) => time;
+
+  // Google Polyline Decoder (Utility Function)
+  const decodePolyline = (encoded: string) => {
+    if (!encoded) return [];
+    const poly = [];
+    let index = 0, len = encoded.length;
+    let lat = 0, lng = 0;
+
+    while (index < len) {
+      let b, shift = 0, result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      poly.push({
+        latitude: lat / 1e5,
+        longitude: lng / 1e5,
+      });
+    }
+    return poly;
+  };
+
+  // Helper to get midpoint of polyline for badge placement
+  const getPolylineMidpoint = (points: any[]) => {
+    if (!points || points.length < 2) return null;
+    const midIndex = Math.floor(points.length / 2);
+    return points[midIndex];
+  };
+
+  // Helper to extract transit line info (e.g. "E-10", "M4") from details
+  const getTransitLineInfo = (details: any) => {
+    if (!details || !Array.isArray(details)) return null;
+    
+    // Check for our simplified backend structure first (step.line)
+    // If not found, try to look for nested transit_details (fallback)
+    const lineNames = details
+      .map((step: any) => {
+          if (step.line) return step.line; // Simplified format
+          if (step.transit_details?.line?.short_name) return step.transit_details.line.short_name; // Raw Google format
+          if (step.transit_details?.line?.name) return step.transit_details.line.name;
+          return null;
+      })
+      .filter(Boolean);
+      
+    const uniqueLines = [...new Set(lineNames)];
+    
+    if (uniqueLines.length === 0) return null;
+    
+    return uniqueLines.join(' > ');
+  };
+
+  const getMapRegion = () => {
+    const currentDay = getCurrentDayData();
+    if (!currentDay?.activities || currentDay.activities.length === 0) {
+      return {
+        latitude: 36.201667,
+        longitude: 29.645556,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
+      };
+    }
+
+    const activitiesWithCoords = currentDay.activities.filter(
+      (a) => a.place?.latitude != null && a.place?.longitude != null
+    );
+
+    if (activitiesWithCoords.length === 0) {
+      return {
+        latitude: 36.201667,
+        longitude: 29.645556,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
+      };
+    }
+
+    const latitudes = activitiesWithCoords.map((a) => a.place?.latitude ?? 0);
+    const longitudes = activitiesWithCoords.map((a) => a.place?.longitude ?? 0);
+
+    const minLat = Math.min(...latitudes);
+    const maxLat = Math.max(...latitudes);
+    const minLng = Math.min(...longitudes);
+    const maxLng = Math.max(...longitudes);
+
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    const latDelta = Math.max((maxLat - minLat) * 1.5, 0.02);
+    const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.02);
+    
+    // Shift center if sheet is maximized to keep markers visible above sheet
+    const finalCenterLat = sheetHeight === BOTTOM_SHEET_MAX_HEIGHT ? centerLat - (latDelta * 0.25) : centerLat;
+
+    return {
+      latitude: finalCenterLat,
+      longitude: centerLng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    };
   };
 
   if (isLoading) {
@@ -142,59 +292,6 @@ export default function TripDetailScreen() {
   }
 
   const currentDay = getCurrentDayData();
-
-  // Map için koordinatları hesapla
-  const getMapRegion = () => {
-    if (!currentDay?.activities || currentDay.activities.length === 0) {
-      return {
-        latitude: 36.201667,
-        longitude: 29.645556,
-        latitudeDelta: 0.15,
-        longitudeDelta: 0.15,
-      };
-    }
-
-    // Koordinatları olan activity'leri filtrele
-    const activitiesWithCoords = currentDay.activities.filter(
-      (a) => a.place?.latitude != null && a.place?.longitude != null
-    );
-
-    if (activitiesWithCoords.length === 0) {
-      // Koordinat yoksa default değer
-      return {
-        latitude: 36.201667,
-        longitude: 29.645556,
-        latitudeDelta: 0.15,
-        longitudeDelta: 0.15,
-      };
-    }
-
-    // Tüm koordinatların min/max değerlerini bul
-    const latitudes = activitiesWithCoords.map((a) => a.place?.latitude ?? 0);
-    const longitudes = activitiesWithCoords.map((a) => a.place?.longitude ?? 0);
-
-    const minLat = Math.min(...latitudes);
-    const maxLat = Math.max(...latitudes);
-    const minLng = Math.min(...longitudes);
-    const maxLng = Math.max(...longitudes);
-
-    // Merkez noktası
-    const centerLat = (minLat + maxLat) / 2;
-    const centerLng = (minLng + maxLng) / 2;
-
-    // Delta değerleri (padding ekle)
-    const latDelta = Math.max((maxLat - minLat) * 1.5, 0.01);
-    const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.01);
-
-    return {
-      latitude: centerLat,
-      longitude: centerLng,
-      latitudeDelta: latDelta,
-      longitudeDelta: lngDelta,
-    };
-  };
-
-  const mapRegion = getMapRegion();
 
   return (
     <View style={styles.root}>
@@ -252,260 +349,316 @@ export default function TripDetailScreen() {
           </View>
         </View>
 
-        {/* Activities List */}
+        {/* Activities List (Original Design) */}
         <ScrollView 
           style={styles.activitiesList} 
           contentContainerStyle={styles.activitiesContent}
           showsVerticalScrollIndicator={false}
         >
           {currentDay?.activities.map((activity, index) => (
-            <View key={index} style={styles.activityCard}>
-              <View style={styles.timeContainer}>
-                <Text style={styles.timeText}>{formatTime(activity.startTime)}</Text>
-              </View>
-
-              <View style={styles.activityContent}>
-                {/* Activity Image */}
-                <View style={styles.activityImageContainer}>
-                  {activity.place?.imageUrls && activity.place.imageUrls.length > 0 ? (
-                    <Image
-                      source={{ uri: activity.place.imageUrls[0] }}
-                      style={styles.activityImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.activityImagePlaceholder}>
-                      <IconSymbol name="photo" size={32} color="#999999" />
+            <View key={index}>
+                 {/* Transport Info (Frontend code restored/preserved if needed) */}
+                 {(activity.travelFromPreviousMode === 'public_transport' || activity.travelFromPreviousMode === 'walking' || activity.travelFromPreviousMode === 'driving') && (
+                  <View style={styles.transportContainer}>
+                    <View style={styles.transportLine} />
+                    <View style={styles.transportBadge}>
+                       <IconSymbol 
+                          name={
+                              activity.travelFromPreviousMode === 'walking' ? 'figure.walk' : 
+                              activity.travelFromPreviousMode === 'driving' ? 'car.fill' : 
+                              'bus.fill'
+                          } 
+                          size={12} 
+                          color="#666" 
+                       />
+                       <Text style={styles.transportInfoText}>
+                          {activity.travelFromPreviousDurationMinutes ? `${activity.travelFromPreviousDurationMinutes} min` : ''}
+                       </Text>
                     </View>
-                  )}
-                  <View style={styles.activityBadge}>
-                    <IconSymbol name="star.fill" size={12} color="#FFB800" />
-                    <Text style={styles.activityRating}>
-                      {activity.place?.googleRating?.toFixed(1) || '4.8'}
-                    </Text>
                   </View>
+                 )}
+
+                <View style={styles.activityCard}>
+                <View style={styles.timeContainer}>
+                    <Text style={styles.timeText}>{formatTime(activity.startTime)}</Text>
                 </View>
 
-                {/* Activity Info */}
-                <View style={styles.activityInfo}>
-                  <Text style={styles.activityTitle}>{activity.place?.name || activity.title}</Text>
-                  <View style={styles.activityMeta}>
-                    <IconSymbol name="tag.fill" size={12} color="#666666" />
-                    <Text style={styles.activityCategory}>
-                      {activity.description.split(' ').slice(0, 2).join(' ')}
-                    </Text>
-                  </View>
-                  
-                  {activity.reason && (
-                    <View style={styles.reasonContainer}>
-                      <Text style={styles.reasonLabel}>Advice</Text>
-                      <Text style={styles.reasonText}>{activity.reason}</Text>
+                <View style={styles.activityContent}>
+                    {/* Activity Image */}
+                    <View style={styles.activityImageContainer}>
+                    {activity.place?.imageUrls && activity.place.imageUrls.length > 0 ? (
+                        <Image
+                        source={{ uri: activity.place.imageUrls[0] }}
+                        style={styles.activityImage}
+                        resizeMode="cover"
+                        />
+                    ) : (
+                        <View style={styles.activityImagePlaceholder}>
+                        <IconSymbol name="photo" size={32} color="#999999" />
+                        </View>
+                    )}
+                    <View style={styles.activityBadge}>
+                        <IconSymbol name="star.fill" size={12} color="#FFB800" />
+                        <Text style={styles.activityRating}>
+                        {activity.place?.googleRating?.toFixed(1) || '4.8'}
+                        </Text>
                     </View>
-                  )}
+                    </View>
 
-                  <View style={styles.activityFooter}>
-                    <Text style={styles.transportText}>
-                      {activity.place?.city || 'Driving'}
-                    </Text>
-                    <Text style={styles.durationText}>
-                      {activity.startTime} - {activity.endTime}
-                    </Text>
-                  </View>
+                    {/* Activity Info */}
+                    <View style={styles.activityInfo}>
+                    <Text style={styles.activityTitle}>{activity.place?.name || activity.title}</Text>
+                    <View style={styles.activityMeta}>
+                        <IconSymbol name="tag.fill" size={12} color="#666666" />
+                        <Text style={styles.activityCategory}>
+                        {activity.description.split(' ').slice(0, 2).join(' ')}
+                        </Text>
+                    </View>
+                    
+                    {activity.reason && (
+                        <View style={styles.reasonContainer}>
+                        <Text style={styles.reasonLabel}>Advice</Text>
+                        <Text style={styles.reasonText}>{activity.reason}</Text>
+                        </View>
+                    )}
+
+                    <View style={styles.activityFooter}>
+                        <Text style={styles.transportText}>
+                        {activity.place?.city || 'Driving'}
+                        </Text>
+                        <Text style={styles.durationText}>
+                        {activity.startTime} - {activity.endTime}
+                        </Text>
+                    </View>
+                    </View>
                 </View>
-              </View>
+                </View>
             </View>
           ))}
-
-          {/* Why Suggested Section - Inside ScrollView */}
-          <View style={styles.whySuggestedSection}>
-            <Text style={styles.whySuggestedTitle}>Why suggested?</Text>
-            <Text style={styles.whySuggestedText}>
-              This large national garden offers a profound nature escape within the city, perfectly aligning with the theme. It has a modest entrance fee (medium budget) and allows for a leisurely, unhurried exploration, matching relaxed intensity.
-            </Text>
-          </View>
+           <View style={{height: 40}} />
         </ScrollView>
 
-      {/* Map Modal */}
+      {/* Map Modal with Bottom Sheet */}
       <Modal
         visible={showMapModal}
         animationType="slide"
         onRequestClose={() => setShowMapModal(false)}
       >
-        <View style={[styles.mapModalContainer, { paddingTop: insets.top }]}>
-          {/* Map Header */}
-          <View style={styles.mapHeader}>
-            <View style={styles.mapHeaderLeft}>
-              <Text style={styles.mapDayTitle}>Day {selectedDay}</Text>
-              {currentDay?.weatherInfo && (
-                <View style={styles.mapWeatherBadge}>
-                  <IconSymbol name="cloud.sun.fill" size={14} color="#0d9488" />
-                  <Text style={styles.mapWeatherBadgeText}>
-                    {currentDay.weatherInfo.temp?.day ? `${Math.round(currentDay.weatherInfo.temp.day)}°` : '—'}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <TouchableOpacity 
-              onPress={() => {
-                console.log('Close button pressed');
-                setShowMapModal(false);
-              }}
-              style={styles.closeButton}
-              activeOpacity={0.7}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+        <View style={styles.mapModalContainer}>
+            {/* Full Screen Map */}
+            <MapView
+                ref={mapRef}
+                style={[styles.map, { height: height }]}
+                provider={PROVIDER_GOOGLE}
+                initialRegion={getMapRegion()}
             >
-              <IconSymbol name="xmark" size={24} color="#222222" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Weather Info Card - Map Modal içinde */}
-          {currentDay?.weatherInfo && (
-            <View style={styles.mapWeatherCard}>
-              <View style={styles.mapWeatherHeader}>
-                <View style={styles.mapWeatherTitleRow}>
-                  <IconSymbol name="cloud.sun.fill" size={20} color="#0d9488" />
-                  <Text style={styles.mapWeatherTitle}>Weather Info</Text>
-                </View>
-              </View>
-              
-              <View style={styles.mapWeatherContent}>
-                {/* Temperature Row */}
-                {currentDay.weatherInfo.temp && (
-                  <View style={styles.mapWeatherTempRow}>
-                    {currentDay.weatherInfo.temp.day !== undefined && (
-                      <View style={styles.mapWeatherTempItem}>
-                        <Text style={styles.mapWeatherTempValue}>
-                          {Math.round(currentDay.weatherInfo.temp.day)}°
-                        </Text>
-                        <Text style={styles.mapWeatherTempLabel}>Average</Text>
-                      </View>
-                    )}
-                    {currentDay.weatherInfo.temp.min !== undefined && (
-                      <View style={styles.mapWeatherTempItem}>
-                        <Text style={styles.mapWeatherTempValue}>
-                          {Math.round(currentDay.weatherInfo.temp.min)}°
-                        </Text>
-                        <Text style={styles.mapWeatherTempLabel}>Min</Text>
-                      </View>
-                    )}
-                    {currentDay.weatherInfo.temp.max !== undefined && (
-                      <View style={styles.mapWeatherTempItem}>
-                        <Text style={styles.mapWeatherTempValue}>
-                          {Math.round(currentDay.weatherInfo.temp.max)}°
-                        </Text>
-                        <Text style={styles.mapWeatherTempLabel}>Max</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {/* Weather Details */}
-                <View style={styles.mapWeatherDetails}>
-                  {currentDay.weatherInfo.weather && (
-                    <View style={styles.mapWeatherDetailItem}>
-                      <IconSymbol name="cloud" size={16} color="#6b7280" />
-                      <Text style={styles.mapWeatherDetailText} numberOfLines={1}>
-                        {currentDay.weatherInfo.weather.main || currentDay.weatherInfo.weather.description || 'N/A'}
-                      </Text>
-                    </View>
-                  )}
-                  {currentDay.weatherInfo.humidity !== undefined && (
-                    <View style={styles.mapWeatherDetailItem}>
-                      <IconSymbol name="drop.fill" size={16} color="#6b7280" />
-                      <Text style={styles.mapWeatherDetailText}>
-                        {Math.round(currentDay.weatherInfo.humidity)}%
-                      </Text>
-                    </View>
-                  )}
-                  {currentDay.weatherInfo.windSpeed !== undefined && (
-                    <View style={styles.mapWeatherDetailItem}>
-                      <IconSymbol name="wind" size={16} color="#6b7280" />
-                      <Text style={styles.mapWeatherDetailText}>
-                        {Math.round(currentDay.weatherInfo.windSpeed)} km/h
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Map */}
-          <MapView
-            style={styles.map}
-            provider={PROVIDER_GOOGLE}
-            initialRegion={mapRegion}
-            region={mapRegion}
-          >
-            {/* Activity Markers */}
-            {currentDay?.activities
-              .filter((activity) => activity.place?.latitude != null && activity.place?.longitude != null)
-              .map((activity, index) => {
-                const lat = activity.place?.latitude ?? 0;
-                const lng = activity.place?.longitude ?? 0;
-                return (
-                  <Marker
+                {/* Activity Markers */}
+                {currentDay?.activities
+                .filter((activity) => activity.place?.latitude != null && activity.place?.longitude != null)
+                .map((activity, index) => (
+                    <Marker
                     key={index}
                     coordinate={{
-                      latitude: lat,
-                      longitude: lng,
+                        latitude: activity.place?.latitude ?? 0,
+                        longitude: activity.place?.longitude ?? 0,
                     }}
                     title={activity.place?.name || activity.title}
-                    description={activity.description}
-                  >
+                    zIndex={2} // Ensure markers are above lines
+                    >
                     <View style={styles.markerContainer}>
-                      <View style={styles.marker}>
+                        <View style={styles.marker}>
                         <Text style={styles.markerText}>{index + 1}</Text>
-                      </View>
+                        </View>
                     </View>
-                  </Marker>
-                );
-              })}
+                    </Marker>
+                ))}
 
-            {/* Route Line */}
-            {currentDay && currentDay.activities.length > 1 && (
-              <Polyline
-                coordinates={currentDay.activities
-                  .filter((activity) => activity.place?.latitude != null && activity.place?.longitude != null)
-                  .map((activity) => ({
-                    latitude: activity.place?.latitude ?? 0,
-                    longitude: activity.place?.longitude ?? 0,
-                  }))}
-                strokeColor="#0d9488"
-                strokeWidth={3}
-              />
-            )}
-          </MapView>
+                {/* Route Lines & Transport Badges */}
+                {currentDay?.activities.map((activity, index) => {
+                     if (index === 0) return null; // No previous activity for first one
+                     
+                     const prevActivity = currentDay.activities[index - 1];
+                     
+                     // Check if we have polyline data
+                     if (activity.travelFromPreviousPolyline) {
+                         const coords = decodePolyline(activity.travelFromPreviousPolyline);
+                         const isWalking = activity.travelFromPreviousMode === 'walking';
+                         const isTransit = activity.travelFromPreviousMode === 'public_transport';
+                         const isDriving = activity.travelFromPreviousMode === 'driving';
+                         
+                         const strokeColor = isWalking ? '#666666' : isTransit ? '#1a73e8' : '#0d9488'; // Gray, Blue, Teal
+                         const midpoint = getPolylineMidpoint(coords);
 
-          {/* Bottom Activities List */}
-          <View style={styles.mapBottomSheet}>
-            <Text style={styles.mapBottomTitle}>Plan for Day {selectedDay}</Text>
-            <ScrollView style={styles.mapActivityList}>
-              {currentDay?.activities.map((activity, index) => (
-                <View key={index} style={styles.mapActivityItem}>
-                  <View style={styles.mapActivityTime}>
-                    <Text style={styles.mapActivityTimeText}>{activity.startTime}</Text>
-                  </View>
-                  <View style={styles.mapActivityContent}>
-                    <Text style={styles.mapActivityTitle}>{activity.place?.name || activity.title}</Text>
-                    <Text style={styles.mapActivityDuration}>
-                      {activity.startTime} - {activity.endTime}
-                    </Text>
-                  </View>
-                  {activity.place?.imageUrls && activity.place.imageUrls.length > 0 && (
-                    <Image
-                      source={{ uri: activity.place.imageUrls[0] }}
-                      style={styles.mapActivityImage}
-                      resizeMode="cover"
-                    />
-                  )}
+                         return (
+                             <React.Fragment key={`route-${index}`}>
+                                 <Polyline
+                                    coordinates={coords}
+                                    strokeColor={strokeColor}
+                                    strokeWidth={4}
+                                    lineDashPattern={isWalking ? [10, 10] : undefined} // Dotted line for walking
+                                    zIndex={1}
+                                 />
+                                 
+                                 {/* Transport Duration Badge on Route */}
+                                 {midpoint && activity.travelFromPreviousDurationMinutes && (
+                                     <Marker
+                                        coordinate={midpoint}
+                                        anchor={{ x: 0.5, y: 0.5 }}
+                                        zIndex={3}
+                                     >
+                                         <View style={[styles.mapTransportBadge, { backgroundColor: strokeColor }]}>
+                                             <IconSymbol 
+                                                name={isWalking ? 'figure.walk' : isDriving ? 'car.fill' : 'bus.fill'} 
+                                                size={10} 
+                                                color="#FFF" 
+                                             />
+                                             <Text style={styles.mapTransportBadgeText}>
+                                                 {isTransit && getTransitLineInfo(activity.travelFromPreviousDetails) 
+                                                    ? `${getTransitLineInfo(activity.travelFromPreviousDetails)} (${activity.travelFromPreviousDurationMinutes} min)`
+                                                    : `${activity.travelFromPreviousDurationMinutes} min`
+                                                 }
+                                             </Text>
+                                         </View>
+                                     </Marker>
+                                 )}
+                             </React.Fragment>
+                         );
+                     } else {
+                         // Fallback to straight line if no polyline (e.g. very short distance or old data)
+                         if (activity.place?.latitude != null && activity.place?.longitude != null && 
+                             prevActivity.place?.latitude != null && prevActivity.place?.longitude != null) {
+                              return (
+                                 <Polyline
+                                    key={`line-${index}`}
+                                    coordinates={[
+                                        { latitude: prevActivity.place.latitude, longitude: prevActivity.place.longitude },
+                                        { latitude: activity.place.latitude, longitude: activity.place.longitude }
+                                    ]}
+                                    strokeColor="#0d9488"
+                                    strokeWidth={3}
+                                    lineDashPattern={[5, 5]} // Dotted for fallback
+                                 />
+                              );
+                         }
+                     }
+                     return null;
+                })}
+            </MapView>
+
+            {/* Modal Header Overlay */}
+            <SafeAreaView style={styles.modalHeaderOverlay} edges={['top']}>
+                <View style={styles.modalHeaderRow}>
+                    <View style={{ width: 40 }} />
+                    <Text style={styles.modalHeaderTitle}>Day {selectedDay} Map</Text>
+                    <TouchableOpacity 
+                        onPress={() => setShowMapModal(false)}
+                        style={styles.closeButton}
+                    >
+                        <IconSymbol name="xmark" size={20} color="#222" />
+                    </TouchableOpacity>
                 </View>
-              ))}
-            </ScrollView>
-          </View>
+            </SafeAreaView>
+
+            {/* Bottom Sheet in Modal */}
+            <Animated.View 
+                style={[
+                    styles.bottomSheet, 
+                    { height: sheetHeight, bottom: 0 } 
+                ]}
+            >
+                {/* Drag Handle */}
+                <View 
+                    style={styles.dragHandleArea}
+                    {...panResponder.panHandlers}
+                >
+                    <View style={styles.dragHandle} />
+                </View>
+
+                {/* Compact Weather Info */}
+                {currentDay?.weatherInfo && (
+                    <View style={styles.compactWeatherContainer}>
+                        <View style={styles.weatherRow}>
+                            <View style={styles.weatherMain}>
+                                <IconSymbol name="cloud.sun.fill" size={20} color="#0d9488" />
+                                <Text style={styles.weatherTemp}>
+                                    {currentDay.weatherInfo.temp?.day ? Math.round(currentDay.weatherInfo.temp.day) : '--'}°
+                                </Text>
+                                <Text style={styles.weatherDesc}>
+                                    {currentDay.weatherInfo.weather?.main || 'Clear'}
+                                </Text>
+                            </View>
+                            <View style={styles.weatherDetails}>
+                                <Text style={styles.weatherDetailText}>
+                                    <IconSymbol name="drop.fill" size={12} color="#6b7280" /> {Math.round(currentDay.weatherInfo.humidity || 0)}%
+                                </Text>
+                                <Text style={styles.weatherDetailText}>
+                                    <IconSymbol name="wind" size={12} color="#6b7280" /> {Math.round(currentDay.weatherInfo.windSpeed || 0)} km/h
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                )}
+
+                {/* Content */}
+                <View style={styles.sheetContent}>
+                    <Text style={styles.sheetTitle}>Route Summary</Text>
+                    
+                    <ScrollView 
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.activitiesScrollContent}
+                    >
+                        {currentDay?.activities.map((activity, index) => (
+                            <View key={index} style={styles.mapActivityItem}>
+                                <View style={styles.mapActivityTime}>
+                                    <Text style={styles.mapActivityTimeText}>{activity.startTime}</Text>
+                                    {/* Dot Line */}
+                                    {index < (currentDay?.activities.length || 0) - 1 && (
+                                        <View style={styles.mapTimeConnector} />
+                                    )}
+                                </View>
+                                <View style={styles.mapActivityContent}>
+                                    <Text style={styles.mapActivityTitle}>{activity.place?.name || activity.title}</Text>
+                                    <Text style={styles.mapActivityDuration}>
+                                    {activity.startTime} - {activity.endTime}
+                                    </Text>
+                                    
+                                    {/* Transport Info in List */}
+                                    {(activity.travelFromPreviousMode) && (
+                                        <View style={styles.mapTransportInfo}>
+                                            <IconSymbol 
+                                                name={
+                                                    activity.travelFromPreviousMode === 'walking' ? 'figure.walk' : 
+                                                    activity.travelFromPreviousMode === 'driving' ? 'car.fill' : 
+                                                    'bus.fill'
+                                                } 
+                                                size={12} 
+                                                color="#666" 
+                                            />
+                                            <Text style={styles.mapTransportText}>
+                                                {activity.travelFromPreviousDurationMinutes} min 
+                                                {activity.travelFromPreviousMode === 'public_transport' && getTransitLineInfo(activity.travelFromPreviousDetails)
+                                                    ? ` · ${getTransitLineInfo(activity.travelFromPreviousDetails)}`
+                                                    : ` (${activity.travelFromPreviousMode === 'public_transport' ? 'Transit' : activity.travelFromPreviousMode})`
+                                                }
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                                {activity.place?.imageUrls && activity.place.imageUrls.length > 0 && (
+                                    <Image
+                                    source={{ uri: activity.place.imageUrls[0] }}
+                                    style={styles.mapActivityImage}
+                                    resizeMode="cover"
+                                    />
+                                )}
+                            </View>
+                        ))}
+                        <View style={{ height: 40 }} />
+                    </ScrollView>
+                </View>
+            </Animated.View>
         </View>
       </Modal>
-
     </View>
   );
 }
@@ -743,135 +896,163 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#999999',
   },
-  whySuggestedSection: {
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 16,
-    marginTop: 24,
-    marginBottom: 8,
+  transportContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+      marginLeft: 72, // Align with content, skipping time col
   },
-  whySuggestedTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#222222',
-    marginBottom: 12,
+  transportLine: {
+      width: 2,
+      height: 20,
+      backgroundColor: '#E5E7EB',
+      marginRight: 12,
   },
-  whySuggestedText: {
-    fontSize: 14,
-    color: '#666666',
-    lineHeight: 22,
+  transportBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#F3F4F6',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 6,
   },
-  bottomCard: {
-    backgroundColor: '#F0F9FB',
-    margin: 20,
-    padding: 16,
-    borderRadius: 16,
+  transportInfoText: {
+      fontSize: 12,
+      color: '#666',
   },
-  bottomCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#222222',
-    marginBottom: 6,
-  },
-  bottomCardText: {
-    fontSize: 14,
-    color: '#666666',
-    lineHeight: 20,
-  },
-  // Map Modal Styles
+  
+  // --- Map Modal Styles ---
   mapModalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  mapHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+  map: {
+    width: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalHeaderOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  mapHeaderLeft: {
+  modalHeaderRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    height: 56,
   },
-  mapDayTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#222222',
-  },
-  mapWeatherBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F0F9FB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  mapWeatherBadgeText: {
-    fontSize: 14,
+  modalHeaderTitle: {
+    fontSize: 17,
     fontWeight: '600',
-    color: '#0d9488',
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  map: {
+    color: '#222',
+    textAlign: 'center',
     flex: 1,
   },
-  markerContainer: {
-    alignItems: 'center',
-  },
-  marker: {
+  closeButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#0d9488',
+    backgroundColor: '#F5F5F7',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+    marginLeft: 'auto', // Push to right if needed, but structure handles it
   },
-  markerText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+  
+  // Bottom Sheet Styles (Reused)
+  bottomSheet: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      backgroundColor: '#FFF',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      elevation: 20,
+      overflow: 'hidden',
   },
-  mapBottomSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    maxHeight: Dimensions.get('window').height * 0.4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+  dragHandleArea: {
+      width: '100%',
+      height: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#FFF',
   },
-  mapBottomTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#222222',
-    marginBottom: 16,
+  dragHandle: {
+      width: 40,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: '#E5E7EB',
   },
-  mapActivityList: {
-    marginBottom: 20,
+  
+  // Compact Weather
+  compactWeatherContainer: {
+      paddingHorizontal: 20,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: '#F3F4F6',
+  },
+  weatherRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#F0F9FB',
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+  },
+  weatherMain: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+  },
+  weatherTemp: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: '#222',
+  },
+  weatherDesc: {
+      fontSize: 14,
+      color: '#666',
+      textTransform: 'capitalize',
+  },
+  weatherDetails: {
+      flexDirection: 'row',
+      gap: 12,
+  },
+  weatherDetailText: {
+      fontSize: 12,
+      color: '#666',
+  },
+
+  // Sheet Content
+  sheetContent: {
+      flex: 1,
+      paddingTop: 16,
+  },
+  sheetTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: '#222',
+      marginHorizontal: 20,
+      marginBottom: 16,
+  },
+  activitiesScrollContent: {
+      paddingHorizontal: 20,
   },
   mapActivityItem: {
     flexDirection: 'row',
@@ -882,11 +1063,18 @@ const styles = StyleSheet.create({
   },
   mapActivityTime: {
     width: 60,
+    alignItems: 'center',
   },
   mapActivityTimeText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#0d9488',
+    marginBottom: 4,
+  },
+  mapTimeConnector: {
+      width: 2,
+      height: 20,
+      backgroundColor: '#E5E7EB',
   },
   mapActivityContent: {
     flex: 1,
@@ -901,6 +1089,7 @@ const styles = StyleSheet.create({
   mapActivityDuration: {
     fontSize: 13,
     color: '#999999',
+    marginBottom: 4,
   },
   mapActivityImage: {
     width: 60,
@@ -908,81 +1097,58 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginLeft: 12,
   },
-  // Weather Card Styles - Map Modal içinde
-  mapWeatherCard: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 20,
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  mapTransportInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
   },
-  mapWeatherHeader: {
-    marginBottom: 12,
+  mapTransportText: {
+      fontSize: 12,
+      color: '#666',
   },
-  mapWeatherTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  mapTransportBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#FFF',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 3,
   },
-  mapWeatherTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#222222',
+  mapTransportBadgeText: {
+      fontSize: 10,
+      color: '#FFF',
+      fontWeight: '700',
   },
-  mapWeatherContent: {
-    gap: 12,
+  
+  // Markers
+  markerContainer: {
+      alignItems: 'center',
   },
-  mapWeatherTempRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 16,
-    backgroundColor: '#F0F9FB',
-    borderRadius: 12,
-    gap: 8,
+  marker: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: '#0d9488',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: '#FFF',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 3,
+      elevation: 5,
   },
-  mapWeatherTempItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  mapWeatherTempValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0d9488',
-    marginBottom: 4,
-  },
-  mapWeatherTempLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  mapWeatherDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 12,
-    paddingTop: 8,
-  },
-  mapWeatherDetailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-    justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  mapWeatherDetailText: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '500',
+  markerText: {
+      color: '#FFF',
+      fontSize: 13,
+      fontWeight: '700',
   },
 });
-

@@ -88,6 +88,9 @@ builder.Services.AddScoped<AIService>();
 builder.Services.AddScoped<GooglePlacesService>();
 builder.Services.AddScoped<PlaceEnrichmentService>();
 
+// Transport
+builder.Services.AddScoped<TransportEnrichmentService>();
+
 // WeatherService (Typed HttpClient)
 builder.Services.AddHttpClient<IWeatherService, WeatherService>();
 
