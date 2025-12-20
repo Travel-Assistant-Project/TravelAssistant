@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection; // 👈 YENİ
 using SmartTripApi.Data;
 using SmartTripApi.DTOs;
 using SmartTripApi.Models;
@@ -19,6 +21,7 @@ namespace SmartTripApi.Services.RoutePlanning
         private readonly TransportEnrichmentService _transportEnrichmentService; // New Service
         private readonly IWeatherService _weatherService;
         private readonly ILogger<RoutePlanService> _logger;
+        private readonly IServiceScopeFactory _scopeFactory; // 👈 YENİ
 
         public RoutePlanService(
             AppDbContext context,
@@ -26,7 +29,8 @@ namespace SmartTripApi.Services.RoutePlanning
             PlaceEnrichmentService placeEnrichmentService,
             TransportEnrichmentService transportEnrichmentService, // Inject here
             IWeatherService weatherService,
-            ILogger<RoutePlanService> logger)
+            ILogger<RoutePlanService> logger,
+            IServiceScopeFactory scopeFactory)                     // 👈 YENİ
         {
             _context = context;
             _aiService = aiService;
@@ -34,12 +38,16 @@ namespace SmartTripApi.Services.RoutePlanning
             _transportEnrichmentService = transportEnrichmentService; // Assign
             _weatherService = weatherService;
             _logger = logger;
+            _scopeFactory = scopeFactory;                           // 👈 YENİ
         }
 
         public async Task<ServiceResult<RoutePlanResponseDto>> CreateRoutePlanAsync(
             int userId,
             RoutePlanRequestDto request)
         {
+            // ⏱ Total süre
+            var swTotal = Stopwatch.StartNew();
+
             AIRequest? aiRequest = null;
 
             try
@@ -48,6 +56,7 @@ namespace SmartTripApi.Services.RoutePlanning
                 var user = await _context.Users.FindAsync(userId);
                 if (user == null)
                 {
+                    swTotal.Stop();
                     return ServiceResult<RoutePlanResponseDto>.Fail(404, "User not found");
                 }
 
@@ -76,8 +85,16 @@ namespace SmartTripApi.Services.RoutePlanning
                 _context.AIRequests.Add(aiRequest);
                 await _context.SaveChangesAsync();
 
+                // ⏱ AI çağrısı süresi
+                var swAi = Stopwatch.StartNew();
+                _logger.LogInformation("⏱ AI route plan request started for user {UserId}", userId);
+
                 // AI çağrısı
                 var aiResponse = await _aiService.GenerateRoutePlanAsync(request);
+
+                swAi.Stop();
+                _logger.LogInformation("⏱ AI route plan response completed in {Duration} ms for user {UserId}",
+                    swAi.ElapsedMilliseconds, userId);
 
                 // primary seçimler
                 var primaryTheme = request.GetPrimaryTheme();
@@ -116,6 +133,10 @@ namespace SmartTripApi.Services.RoutePlanning
                     itinerary.Id, userId);
 
                 var responseDays = new List<DayDetailDto>();
+
+                // ⏱ Gün + aktiviteler build süresi
+                var swBuild = Stopwatch.StartNew();
+                _logger.LogInformation("⏱ Building itinerary days & activities for itinerary {ItineraryId}", itinerary.Id);
 
                 // Gün + aktiviteler
                 foreach (var aiDay in aiResponse.Days)
@@ -210,8 +231,8 @@ namespace SmartTripApi.Services.RoutePlanning
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, 
-                                "Error processing activity '{ActivityTitle}' for day {DayNumber}. Skipping this activity.", 
+                            _logger.LogError(ex,
+                                "Error processing activity '{ActivityTitle}' for day {DayNumber}. Skipping this activity.",
                                 aiActivity.Title ?? "Unknown", aiDay.DayNumber);
                             // Continue with next activity instead of failing entire request
                         }
@@ -224,6 +245,10 @@ namespace SmartTripApi.Services.RoutePlanning
                     });
                 }
 
+                swBuild.Stop();
+                _logger.LogInformation("⏱ Built itinerary days & activities in {Duration} ms for itinerary {ItineraryId}",
+                    swBuild.ElapsedMilliseconds, itinerary.Id);
+
                 _logger.LogInformation(
                     "Successfully created route plan with {DaysCount} days and {ItineraryId}",
                     responseDays.Count, itinerary.Id);
@@ -234,44 +259,7 @@ namespace SmartTripApi.Services.RoutePlanning
                 aiRequest.AiResponse = JsonDocument.Parse(JsonSerializer.Serialize(aiResponse));
                 await _context.SaveChangesAsync();
 
-                // Enrichment
-                try
-                {
-                    _logger.LogInformation("Starting enrichment (places + weather) for itinerary {ItineraryId}",
-                        itinerary.Id);
-
-                    itinerary.Status = "processing";
-                    await _context.SaveChangesAsync();
-
-                    await _placeEnrichmentService.EnrichItineraryPlacesAsync(itinerary.Id);
-                    await _weatherService.UpdateItineraryWeatherAsync(itinerary.Id);
-                    
-                    // Transport Enrichment
-                    try 
-                    {
-                        await _transportEnrichmentService.EnrichItineraryTransportAsync(itinerary.Id);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error enriching transport for itinerary {ItineraryId}", itinerary.Id);
-                        // Don't fail the whole process if transport enrichment fails
-                    }
-
-                    itinerary.Status = "completed";
-                    await _context.SaveChangesAsync();
-
-                    _logger.LogInformation("Completed enrichment (places + weather) for itinerary {ItineraryId}",
-                        itinerary.Id);
-                }
-                catch (Exception enrichmentEx)
-                {
-                    _logger.LogError(enrichmentEx,
-                        "Error enriching places/weather for itinerary {ItineraryId}", itinerary.Id);
-
-                    itinerary.Status = "completed_with_warnings";
-                    await _context.SaveChangesAsync();
-                }
-
+                // --- RESPONSE'U HAZIRLA ---
                 var response = new RoutePlanResponseDto
                 {
                     ItineraryId = itinerary.Id,
@@ -281,10 +269,83 @@ namespace SmartTripApi.Services.RoutePlanning
                     Days = responseDays
                 };
 
+                // --- ENRICHMENT'İ BACKGROUND'A AL ---
+                _ = Task.Run(async () =>
+                {
+                    using var scope = _scopeFactory.CreateScope();
+
+                    var scopedContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var placeEnrichment = scope.ServiceProvider.GetRequiredService<PlaceEnrichmentService>();
+                    var weatherService = scope.ServiceProvider.GetRequiredService<IWeatherService>();
+                    var transportEnrichment = scope.ServiceProvider.GetRequiredService<TransportEnrichmentService>();
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<RoutePlanService>>();
+
+                    try
+                    {
+                        logger.LogInformation("Starting enrichment (places + weather) for itinerary {ItineraryId}",
+                            itinerary.Id);
+
+                        var itineraryEntity = await scopedContext.Itineraries.FindAsync(itinerary.Id);
+                        if (itineraryEntity == null)
+                        {
+                            logger.LogWarning("Itinerary {ItineraryId} not found for enrichment", itinerary.Id);
+                            return;
+                        }
+
+                        itineraryEntity.Status = "processing";
+                        await scopedContext.SaveChangesAsync();
+
+                        await placeEnrichment.EnrichItineraryPlacesAsync(itinerary.Id);
+                        await weatherService.UpdateItineraryWeatherAsync(itinerary.Id);
+
+                        // Transport Enrichment
+                        try
+                        {
+                            await transportEnrichment.EnrichItineraryTransportAsync(itinerary.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Error enriching transport for itinerary {ItineraryId}", itinerary.Id);
+                            // Don't fail the whole process if transport enrichment fails
+                        }
+
+                        itineraryEntity.Status = "completed";
+                        await scopedContext.SaveChangesAsync();
+
+                        logger.LogInformation("Completed enrichment (places + weather) for itinerary {ItineraryId}",
+                            itinerary.Id);
+                    }
+                    catch (Exception enrichmentEx)
+                    {
+                        logger.LogError(enrichmentEx,
+                            "Error enriching places/weather for itinerary {ItineraryId}", itinerary.Id);
+
+                        try
+                        {
+                            var itineraryEntity = await scopedContext.Itineraries.FindAsync(itinerary.Id);
+                            if (itineraryEntity != null)
+                            {
+                                itineraryEntity.Status = "completed_with_warnings";
+                                await scopedContext.SaveChangesAsync();
+                            }
+                        }
+                        catch
+                        {
+                            // burada ekstra log istersen ekleyebilirsin
+                        }
+                    }
+                });
+
+                swTotal.Stop();
+                _logger.LogInformation("⏱ CreateRoutePlanAsync TOTAL duration: {Duration} ms for user {UserId}",
+                    swTotal.ElapsedMilliseconds, userId);
+
+                // Kullanıcıyı bekletmeden dön
                 return ServiceResult<RoutePlanResponseDto>.Ok(response);
             }
             catch (Exception ex)
             {
+                swTotal.Stop();
                 _logger.LogError(ex, "Error creating route plan for region {Region}", request.Region);
 
                 if (aiRequest != null)
@@ -359,13 +420,14 @@ namespace SmartTripApi.Services.RoutePlanning
 
                 // "HH:mm" formatında deneme (örn: "09:00", "14:30")
                 var formats = new[] { "HH:mm", "H:mm", "hh:mm", "h:mm", "HH:mm:ss", "H:mm:ss", "h:mm tt", "hh:mm tt" };
-                
+
                 foreach (var format in formats)
                 {
-                    if (DateTime.TryParseExact(timeString, format, 
-                        System.Globalization.CultureInfo.InvariantCulture, 
-                        System.Globalization.DateTimeStyles.None, 
-                        out var dateTime))
+                    if (DateTime.TryParseExact(timeString,
+                            format,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None,
+                            out var dateTime))
                     {
                         return dateTime.TimeOfDay;
                     }
@@ -373,8 +435,8 @@ namespace SmartTripApi.Services.RoutePlanning
 
                 // Manuel parse denemesi (örn: "9:00" -> 9 saat, 0 dakika)
                 var parts = timeString.Split(':');
-                if (parts.Length >= 2 && 
-                    int.TryParse(parts[0], out var hours) && 
+                if (parts.Length >= 2 &&
+                    int.TryParse(parts[0], out var hours) &&
                     int.TryParse(parts[1], out var minutes))
                 {
                     if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60)
