@@ -123,6 +123,74 @@ namespace SmartTripApi.Controllers
             }
         }
 
+        [HttpGet("{id}")]
+        [Authorize]
+        public async Task<ActionResult<PlaceDetailDto>> GetPlaceDetail(int id)
+        {
+            try
+            {
+                _logger.LogInformation("Getting place detail for ID: {PlaceId}", id);
+
+                var place = await _context.Places
+                    .Include(p => p.PlacePhotos)
+                    .FirstOrDefaultAsync(p => p.Id == id);
+
+                if (place == null)
+                {
+                    _logger.LogWarning("Place not found with ID: {PlaceId}", id);
+                    return NotFound(new { message = "Place not found" });
+                }
+
+                // Google Reviews'ı ayrı bir sorgu ile al
+                var reviews = await _context.Set<Models.GoogleReview>()
+                    .Where(r => r.PlaceId == id)
+                    .OrderByDescending(r => r.ReviewTime)
+                    .Take(10)
+                    .ToListAsync();
+
+                var placeDetail = new PlaceDetailDto
+                {
+                    Id = place.Id,
+                    Name = place.Name,
+                    Description = place.Description,
+                    Category = place.Category.HasValue ? place.Category.Value.ToString() : null,
+                    City = place.City,
+                    Country = place.Country,
+                    Location = !string.IsNullOrEmpty(place.City) && !string.IsNullOrEmpty(place.Country)
+                        ? $"{place.City}, {place.Country}"
+                        : place.FormattedAddress ?? "Unknown location",
+                    ImageUrls = place.PhotoUrls != null && place.PhotoUrls.Length > 0
+                        ? place.PhotoUrls.ToList()
+                        : null,
+                    GoogleRating = place.GoogleRating,
+                    UserRatingsTotal = place.UserRatingsTotal,
+                    PriceLevel = place.PriceLevel,
+                    GoogleMapsUrl = place.GoogleMapsUrl,
+                    FormattedAddress = place.FormattedAddress,
+                    Latitude = place.Latitude,
+                    Longitude = place.Longitude,
+                    GoogleReviews = reviews.Select(r => new PlaceReviewDto
+                    {
+                        AuthorName = r.AuthorName,
+                        Comment = r.Comment,
+                        Rating = r.Rating,
+                        ProfilePhotoUrl = r.ProfilePhotoUrl,
+                        ReviewTime = r.ReviewTime
+                    }).ToList()
+                };
+
+                _logger.LogInformation("Returning place detail for {PlaceName} with {ReviewCount} reviews", 
+                    place.Name, reviews.Count);
+
+                return Ok(placeDetail);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting place detail for ID: {PlaceId}", id);
+                return StatusCode(500, new { message = "Failed to get place detail", error = ex.Message });
+            }
+        }
+
         [HttpGet("location-info")]
         [Authorize]
         public async Task<ActionResult<LocationInfoDto>> GetLocationInfo([FromQuery] string destination)

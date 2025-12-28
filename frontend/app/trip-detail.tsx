@@ -28,6 +28,7 @@ interface Activity {
   startTime: string;
   endTime: string;
   place: {
+    id?: number;
     name: string;
     description?: string;
     city?: string;
@@ -88,6 +89,7 @@ export default function TripDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(1);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [favoritePlaces, setFavoritePlaces] = useState<Set<number>>(new Set());
 
   // --- Map Modal Bottom Sheet Logic ---
   const panY = useRef(new Animated.Value(0)).current;
@@ -122,6 +124,7 @@ export default function TripDetailScreen() {
 
   useEffect(() => {
     fetchTripDetails();
+    fetchFavoritePlaces();
   }, []);
 
   useEffect(() => {
@@ -138,10 +141,49 @@ export default function TripDetailScreen() {
     try {
       const response = await api.get(`/api/Routes/${itineraryId}`);
       setTripData(response.data);
+      
+      // Debug: Place ID'leri kontrol et
+      response.data.days.forEach((day: any) => {
+        day.activities.forEach((activity: any) => {
+          if (activity.place) {
+            console.log('Place:', activity.place.name, 'ID:', activity.place.id);
+          }
+        });
+      });
+      
       setIsLoading(false);
     } catch (error: any) {
       console.error('Error fetching trip details:', error);
       setIsLoading(false);
+    }
+  };
+
+  const fetchFavoritePlaces = async () => {
+    try {
+      const response = await api.get('/api/Favorites/places/ids');
+      setFavoritePlaces(new Set(response.data));
+    } catch (error) {
+      console.error('Error fetching favorite places:', error);
+    }
+  };
+
+  const togglePlaceFavorite = async (placeId: number) => {
+    try {
+      const isFavorite = favoritePlaces.has(placeId);
+      
+      if (isFavorite) {
+        await api.delete(`/api/Favorites/places/${placeId}`);
+        setFavoritePlaces(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(placeId);
+          return newSet;
+        });
+      } else {
+        await api.post(`/api/Favorites/places/${placeId}`);
+        setFavoritePlaces(prev => new Set(prev).add(placeId));
+      }
+    } catch (error) {
+      console.error('Error toggling place favorite:', error);
     }
   };
 
@@ -403,6 +445,20 @@ export default function TripDetailScreen() {
                         {activity.place?.googleRating?.toFixed(1) || '4.8'}
                         </Text>
                     </View>
+                    
+                    {/* Favorite Button */}
+                    {activity.place?.id && (
+                      <TouchableOpacity
+                        style={styles.favoritePlaceButton}
+                        onPress={() => togglePlaceFavorite(activity.place!.id!)}
+                      >
+                        <IconSymbol
+                          name={favoritePlaces.has(activity.place.id) ? 'heart.fill' : 'heart'}
+                          size={20}
+                          color={favoritePlaces.has(activity.place.id) ? '#dc2626' : '#ffffff'}
+                        />
+                      </TouchableOpacity>
+                    )}
                     </View>
 
                     {/* Activity Info */}
@@ -543,21 +599,24 @@ export default function TripDetailScreen() {
                      }
                      return null;
                 })}
-            </MapView>
-
-            {/* Modal Header Overlay */}
-            <SafeAreaView style={styles.modalHeaderOverlay} edges={['top']}>
-                <View style={styles.modalHeaderRow}>
-                    <View style={{ width: 40 }} />
-                    <Text style={styles.modalHeaderTitle}>Day {selectedDay} Map</Text>
-                    <TouchableOpacity 
-                        onPress={() => setShowMapModal(false)}
-                        style={styles.closeButton}
-                    >
-                        <IconSymbol name="xmark" size={20} color="#222" />
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
+        {/* Modal Header Overlay as a child of MapView so it renders above the native map and receives touches */}
+        <View pointerEvents="box-none" style={styles.mapOverlayContainer}>
+          <View pointerEvents="box-none" style={styles.modalHeaderOverlay}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ width: 48 }} />
+              <Text style={styles.modalHeaderTitle}>Day {selectedDay} Map</Text>
+              <TouchableOpacity 
+                onPress={() => setShowMapModal(false)}
+                style={styles.closeButton}
+                hitSlop={{ top: 20, left: 20, right: 20, bottom: 20 }}
+                accessibilityRole="button"
+              >
+                <IconSymbol name="xmark" size={26} color="#222" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </MapView>
 
             {/* Bottom Sheet in Modal */}
             <Animated.View 
@@ -842,6 +901,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
+  favoritePlaceButton: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
   activityRating: {
     fontSize: 13,
     fontWeight: '600',
@@ -850,11 +925,18 @@ const styles = StyleSheet.create({
   activityInfo: {
     padding: 14,
   },
+  activityTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   activityTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#222222',
-    marginBottom: 6,
+    flex: 1,
+    marginRight: 8,
   },
   activityMeta: {
     flexDirection: 'row',
@@ -941,17 +1023,28 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    paddingTop: 60,
+  },
+  mapOverlayContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    elevation: 30,
+    pointerEvents: 'box-none',
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    height: 56,
+    paddingTop: 24,
+    paddingBottom: 16,
+    height: 80,
   },
   modalHeaderTitle: {
     fontSize: 17,
@@ -961,13 +1054,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#F5F5F7',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 'auto', // Push to right if needed, but structure handles it
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   
   // Bottom Sheet Styles (Reused)

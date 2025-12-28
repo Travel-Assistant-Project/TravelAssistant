@@ -146,6 +146,140 @@ namespace SmartTripApi.Controllers
 
             return Ok(favoriteIds);
         }
+
+        // ==================== PLACE FAVORITES ====================
+
+        /// <summary>
+        /// Get all favorite places for the current user
+        /// </summary>
+        [HttpGet("places")]
+        public async Task<ActionResult<List<object>>> GetFavoritePlaces()
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var favorites = await _context.Favorites
+                .Where(f => f.UserId == userId.Value && f.PlaceId != null)
+                .Include(f => f.Place)
+                    .ThenInclude(p => p!.PlacePhotos)
+                .OrderByDescending(f => f.CreatedAt)
+                .Select(f => new
+                {
+                    id = f.Place!.Id,
+                    googlePlaceId = f.Place.GooglePlaceId,
+                    name = f.Place.Name,
+                    address = f.Place.FormattedAddress,
+                    latitude = f.Place.Latitude,
+                    longitude = f.Place.Longitude,
+                    category = f.Place.Category,
+                    rating = f.Place.GoogleRating,
+                    userRatingsTotal = f.Place.UserRatingsTotal,
+                    priceLevel = f.Place.PriceLevel,
+                    openingHours = f.Place.OpeningHours,
+                    googleMapsUrl = f.Place.GoogleMapsUrl,
+                    photoUrls = f.Place.PhotoUrls,
+                    photos = f.Place.PlacePhotos.Select(p => new
+                    {
+                        p.ImageUrl
+                    }).ToList(),
+                    favoritedAt = f.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(favorites);
+        }
+
+        /// <summary>
+        /// Add a place to favorites
+        /// </summary>
+        [HttpPost("places/{placeId}")]
+        public async Task<ActionResult> AddFavoritePlace(int placeId)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+                return Unauthorized(new { message = "Invalid user token" });
+
+            // Check if place exists
+            var place = await _context.Places.FirstOrDefaultAsync(p => p.Id == placeId);
+            if (place == null)
+                return NotFound(new { message = "Place not found" });
+
+            // Check if already favorited
+            var existingFavorite = await _context.Favorites
+                .FirstOrDefaultAsync(f => f.UserId == userId.Value && f.PlaceId == placeId);
+
+            if (existingFavorite != null)
+                return Ok(new { message = "Already in favorites" });
+
+            var favorite = new Favorite
+            {
+                UserId = userId.Value,
+                PlaceId = placeId,
+                CreatedAt = DateTimeHelper.GetTurkeyTime()
+            };
+
+            _context.Favorites.Add(favorite);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Added to favorites", id = favorite.Id });
+        }
+
+        /// <summary>
+        /// Remove a place from favorites
+        /// </summary>
+        [HttpDelete("places/{placeId}")]
+        public async Task<ActionResult> RemoveFavoritePlace(int placeId)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var favorite = await _context.Favorites
+                .FirstOrDefaultAsync(f => f.UserId == userId.Value && f.PlaceId == placeId);
+
+            if (favorite == null)
+                return NotFound(new { message = "Favorite not found" });
+
+            _context.Favorites.Remove(favorite);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Removed from favorites" });
+        }
+
+        /// <summary>
+        /// Check if a place is favorited
+        /// </summary>
+        [HttpGet("places/{placeId}/check")]
+        public async Task<ActionResult<bool>> CheckFavoritePlace(int placeId)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var isFavorite = await _context.Favorites
+                .AnyAsync(f => f.UserId == userId.Value && f.PlaceId == placeId);
+
+            return Ok(isFavorite);
+        }
+
+        /// <summary>
+        /// Get all favorite place IDs for the current user
+        /// </summary>
+        [HttpGet("places/ids")]
+        public async Task<ActionResult<List<int>>> GetFavoritePlaceIds()
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var favoriteIds = await _context.Favorites
+                .Where(f => f.UserId == userId.Value && f.PlaceId != null)
+                .Select(f => f.PlaceId!.Value)
+                .ToListAsync();
+
+            return Ok(favoriteIds);
+        }
     }
 }
 
