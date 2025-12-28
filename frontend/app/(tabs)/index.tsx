@@ -27,12 +27,26 @@ interface Trip {
   createdAt: string;
 }
 
+interface UserRecommendations {
+  totalFavoriteItineraries: number;
+  totalFavoritePlaces: number;
+  totalCreatedItineraries: number;
+  preferredThemes: string[];
+  preferredRegions: string[];
+  preferredBudgetRange: string;
+  preferredIntensity: string;
+  aiRecommendations: string;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState("");
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
+  const [recommendations, setRecommendations] = useState<UserRecommendations | null>(null);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
 
+  // App açıldığında bir kere çalışacak
   useEffect(() => {
     const loadUserInfo = async () => {
       const stored = await AsyncStorage.getItem("userInfo");
@@ -42,7 +56,23 @@ export default function HomeScreen() {
       }
     };
 
+    const loadCachedRecommendations = async () => {
+      try {
+        const cached = await AsyncStorage.getItem("cachedRecommendations");
+        if (cached) {
+          setRecommendations(JSON.parse(cached));
+        } else {
+          // Cache yoksa, yeni öneri al
+          await fetchRecommendations();
+        }
+      } catch (error) {
+        console.error("Error loading cached recommendations:", error);
+        await fetchRecommendations();
+      }
+    };
+
     loadUserInfo();
+    loadCachedRecommendations();
   }, []);
 
   const fetchRecentTrips = useCallback(async () => {
@@ -64,9 +94,25 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const fetchRecommendations = async () => {
+    setIsLoadingRecommendations(true);
+    try {
+      const response = await api.get("/api/AI/user-recommendations");
+      setRecommendations(response.data);
+      
+      // Yeni öneriyi cache'e kaydet
+      await AsyncStorage.setItem("cachedRecommendations", JSON.stringify(response.data));
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+    } finally {
+      setIsLoadingRecommendations(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       fetchRecentTrips();
+      // fetchRecommendations'ı buradan çıkardık - sadece başta çalışacak
     }, [fetchRecentTrips])
   );
 
@@ -127,6 +173,95 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
+        {/* AI Recommendations Section */}
+        {recommendations && (
+          <View style={styles.recommendationsSection}>
+            <View style={styles.recommendationsHeader}>
+              <View style={styles.recommendationsHeaderLeft}>
+                <IconSymbol name="sparkles" size={22} color="#0d9488" />
+                <Text style={styles.recommendationsTitle}>Recommendations for You</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={fetchRecommendations}
+                disabled={isLoadingRecommendations}
+                activeOpacity={0.7}
+              >
+                <IconSymbol 
+                  name="arrow.clockwise" 
+                  size={20} 
+                  color={isLoadingRecommendations ? "#9ca3af" : "#0d9488"} 
+                />
+              </TouchableOpacity>
+            </View>
+            
+            {/* User Stats */}
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <IconSymbol name="heart.fill" size={18} color="#0d9488" />
+                <Text style={styles.statNumber}>{recommendations.totalFavoriteItineraries}</Text>
+                <Text style={styles.statLabel}>Routes</Text>
+              </View>
+              <View style={styles.statItem}>
+                <IconSymbol name="location.fill" size={18} color="#0d9488" />
+                <Text style={styles.statNumber}>{recommendations.totalFavoritePlaces}</Text>
+                <Text style={styles.statLabel}>Places</Text>
+              </View>
+              <View style={styles.statItem}>
+                <IconSymbol name="map.fill" size={18} color="#0d9488" />
+                <Text style={styles.statNumber}>{recommendations.totalCreatedItineraries}</Text>
+                <Text style={styles.statLabel}>Created</Text>
+              </View>
+            </View>
+
+            {/* Preferred Themes & Regions */}
+            {(recommendations.preferredThemes.length > 0 || recommendations.preferredRegions.length > 0) && (
+              <View style={styles.preferencesRow}>
+                {recommendations.preferredThemes.length > 0 && (
+                  <View style={styles.preferencesColumn}>
+                    <Text style={styles.preferencesLabel}>Your Themes</Text>
+                    <View style={styles.tagsContainer}>
+                      {recommendations.preferredThemes.slice(0, 2).map((theme, index) => (
+                        <View key={index} style={styles.tag}>
+                          <Text style={styles.tagText}>{theme}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+                
+                {recommendations.preferredRegions.length > 0 && (
+                  <View style={styles.preferencesColumn}>
+                    <Text style={styles.preferencesLabel}>Top Regions</Text>
+                    <View style={styles.tagsContainer}>
+                      {recommendations.preferredRegions.slice(0, 2).map((region, index) => (
+                        <View key={index} style={styles.regionTag}>
+                          <Text style={styles.regionTagText}>{region}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* AI Recommendations Text */}
+            {recommendations.aiRecommendations && (
+              <View style={styles.aiTextContainer}>
+                <Text style={styles.aiText}>{recommendations.aiRecommendations}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Show loading only if we don't have recommendations yet */}
+        {!recommendations && isLoadingRecommendations && (
+          <View style={styles.recommendationsLoading}>
+            <ActivityIndicator size="small" color="#0d9488" />
+            <Text style={styles.loadingText}>Loading recommendations...</Text>
+          </View>
+        )}
+
         {/* Recent Trips */}
         {recentTrips.length > 0 && (
           <View style={styles.recentTripsSection}>
@@ -172,13 +307,13 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Suggestion */}
+        {/* Suggestion
         <View style={styles.suggestionCard}>
           <IconSymbol name="lightbulb" size={18} color="#5C9B9B" />
           <Text style={styles.suggestionText}>
             Would you like a coastal trip this week?
           </Text>
-        </View>
+        </View> */}
       </ScrollView>
     </SafeAreaView>
   );
@@ -345,5 +480,140 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontSize: 14,
     color: "#333333",
+  },
+  // AI Recommendations Styles
+  recommendationsSection: {
+    marginTop: 2,
+    marginBottom: 24,
+    backgroundColor: "#F0F9FB",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#d1fae5",
+  },
+  recommendationsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  recommendationsHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  recommendationsTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#222222",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  statItem: {
+    alignItems: "center",
+    gap: 6,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#0d9488",
+  },
+  statLabel: {
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "500",
+    textTransform: "uppercase",
+  },
+  preferencesRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  preferencesColumn: {
+    flex: 1,
+  },
+  preferencesLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4A4A4A",
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  tag: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#0d9488",
+  },
+  tagText: {
+    fontSize: 12,
+    color: "#0d9488",
+    fontWeight: "600",
+  },
+  regionTag: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#0d9488",
+  },
+  regionTagText: {
+    fontSize: 12,
+    color: "#0d9488",
+    fontWeight: "600",
+  },
+  aiTextContainer: {
+    marginTop: 4,
+    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: "#0d9488",
+  },
+  aiText: {
+    fontSize: 13,
+    color: "#4A4A4A",
+    lineHeight: 20,
+  },
+  recommendationsLoading: {
+    marginTop: 24,
+    padding: 20,
+    alignItems: "center",
+    backgroundColor: "#F0F9FB",
+    borderRadius: 16,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#6b7280",
   },
 });

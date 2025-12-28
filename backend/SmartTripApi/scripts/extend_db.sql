@@ -72,3 +72,9 @@ CREATE TABLE IF NOT EXISTS activity_transports (
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_activity_transports_activity_id ON activity_transports(activity_id);
 
+----- 28.12.2025
+-- places tablosuna photo_references kolonu ekle
+-- ALTER TABLE places 
+-- ADD COLUMN photo_references text[] NULL;
+
+-- COMMENT ON COLUMN places.photo_references IS 'Google Places photo reference strings for proxy usage';

@@ -163,18 +163,6 @@ namespace SmartTripApi.DTOs
         public string? TravelFromPreviousPolyline { get; set; }
     }
 
-    public class PlaceDetailDto
-    {
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public string? City { get; set; }
-        public string? Country { get; set; }
-        public List<string>? ImageUrls { get; set; }
-        public decimal? GoogleRating { get; set; }
-        public decimal? Latitude { get; set; }
-        public decimal? Longitude { get; set; }
-    }
-
 
     // =======================
     // AI RESPONSE DTO

@@ -34,6 +34,7 @@ namespace SmartTripApi.Mappers
                                 Place = a.Place != null
                                     ? new PlaceDetailDto
                                     {
+                                        Id = a.Place.Id,  // 👈 PLACE ID EKLENDİ
                                         Name = a.Place.Name,
                                         Description = a.Place.Description,
                                         City = a.Place.City,

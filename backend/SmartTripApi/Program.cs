@@ -97,6 +97,9 @@ builder.Services.AddHttpClient<IWeatherService, WeatherService>();
 //Route Planning Service 
 builder.Services.AddScoped<IRoutePlanService, RoutePlanService>();
 
+// User Analysis Service
+builder.Services.AddScoped<UserAnalysisService>();
+
 // Read API keys from .env file and override appsettings
 var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 var googleApiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
