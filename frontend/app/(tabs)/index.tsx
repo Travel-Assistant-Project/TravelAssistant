@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -41,6 +42,7 @@ interface UserRecommendations {
 export default function HomeScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [recommendations, setRecommendations] = useState<UserRecommendations | null>(null);
@@ -120,11 +122,38 @@ export default function HomeScreen() {
     router.push('/(tabs)/my-trips');
   };
 
+  const handleEventsPress = () => {
+    router.push('/(tabs)/events');
+  };
+
   const handleTripPress = (tripId: number) => {
     router.push({
       pathname: "/trip-detail",
       params: { itineraryId: tripId.toString() },
     });
+  };
+
+  const handleNotificationPress = () => {
+    Alert.alert(
+      "Notifications",
+      "You have no new notifications at the moment.",
+      [{ text: "OK", style: "default" }]
+    );
+  };
+
+  const handleSearchSubmit = () => {
+    if (searchQuery.trim()) {
+      router.push({
+        pathname: "/(tabs)/explore",
+        params: { query: searchQuery.trim() },
+      });
+    } else {
+      Alert.alert("Search", "Please enter a destination to search for trips.");
+    }
+  };
+
+  const handleSearchPress = () => {
+    router.push("/(tabs)/explore");
   };
 
   return (
@@ -143,43 +172,77 @@ export default function HomeScreen() {
             <Text style={styles.subtitle}>Where would you like to go?</Text>
           </View>
 
-          <TouchableOpacity style={styles.bellButton}>
+          <TouchableOpacity 
+            style={styles.bellButton}
+            onPress={handleNotificationPress}
+            activeOpacity={0.7}
+          >
             <IconSymbol name="bell" size={20} color="#4A4A4A" />
           </TouchableOpacity>
         </View>
 
         {/* Search */}
-        <View style={styles.searchContainer}>
+        <TouchableOpacity 
+          style={styles.searchContainer}
+          onPress={handleSearchPress}
+          activeOpacity={0.8}
+        >
           <IconSymbol name="magnifyingglass" size={18} color="#8E8E8F" />
           <TextInput
             placeholder="Where do you want to go?"
             style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearchSubmit}
+            returnKeyType="search"
+            editable={true}
           />
-        </View>
-
-        {/* My Trips Button */}
-        <TouchableOpacity 
-          style={styles.myTripsButton}
-          onPress={handleMyTripsPress}
-          activeOpacity={0.8}
-        >
-          <View style={styles.myTripsButtonContent}>
-            <IconSymbol name="map.fill" size={24} color="#0d9488" />
-            <View style={styles.myTripsButtonText}>
-              <Text style={styles.myTripsButtonTitle}>My Trips</Text>
-              <Text style={styles.myTripsButtonSubtitle}>View all your trips</Text>
-            </View>
-            <IconSymbol name="chevron.right" size={20} color="#9ca3af" />
-          </View>
         </TouchableOpacity>
+
+        {/* Quick Actions Section */}
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+          
+          {/* My Trips Button */}
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={handleMyTripsPress}
+            activeOpacity={0.8}
+          >
+            <View style={styles.quickActionContent}>
+              <IconSymbol name="map.fill" size={24} color="#0d9488" />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>My Trips</Text>
+                <Text style={styles.quickActionSubtitle}>View all your trips</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color="#9ca3af" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Events Button */}
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={handleEventsPress}
+            activeOpacity={0.8}
+          >
+            <View style={styles.quickActionContent}>
+              <IconSymbol name="calendar" size={24} color="#0d9488" />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>Find Events</Text>
+                <Text style={styles.quickActionSubtitle}>Discover concerts & shows</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color="#9ca3af" />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* AI Recommendations Section */}
         {recommendations && (
           <View style={styles.recommendationsSection}>
             <View style={styles.recommendationsHeader}>
               <View style={styles.recommendationsHeaderLeft}>
-                <IconSymbol name="sparkles" size={22} color="#0d9488" />
-                <Text style={styles.recommendationsTitle}>Recommendations for You</Text>
+                <IconSymbol name="sparkles" size={25} color="#0d9488" />
+                <Text style={styles.recommendationsTitle}>Your Best Matches</Text>
               </View>
               <TouchableOpacity 
                 style={styles.refreshButton}
@@ -349,54 +412,78 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   bellButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E5E5EA",
+    borderColor: "#F0F4F8",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#FAFBFC",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F5F7",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 24,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 4,
   },
   searchInput: {
     marginLeft: 8,
     flex: 1,
     fontSize: 14,
   },
-  myTripsButton: {
-    backgroundColor: "#F0F9FB",
-    borderRadius: 16,
-    padding: 16,
+  quickActionsSection: {
     marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  myTripsButtonContent: {
+  quickActionsTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#222222",
+    marginBottom: 16,
+  },
+  quickActionButton: {
+    backgroundColor: "#FDFFFE",
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#F0F4F8",
+  },
+  quickActionContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  myTripsButtonText: {
+  quickActionText: {
     flex: 1,
   },
-  myTripsButtonTitle: {
+  quickActionTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#222222",
     marginBottom: 2,
   },
-  myTripsButtonSubtitle: {
+  quickActionSubtitle: {
     fontSize: 13,
     color: "#6b7280",
   },
@@ -432,15 +519,17 @@ const styles = StyleSheet.create({
   },
   tripCard: {
     width: "31%",
-    height: 140,
-    borderRadius: 16,
-    padding: 12,
+    height: 150,
+    borderRadius: 20,
+    padding: 16,
     justifyContent: "flex-end",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   tripCardContent: {
     flex: 1,
@@ -469,13 +558,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   suggestionCard: {
-    marginTop: 24,
+    marginTop: 28,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F9FB",
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
   },
   suggestionText: {
     fontSize: 14,
@@ -484,18 +580,24 @@ const styles = StyleSheet.create({
   // AI Recommendations Styles
   recommendationsSection: {
     marginTop: 2,
-    marginBottom: 24,
-    backgroundColor: "#F0F9FB",
-    borderRadius: 20,
-    padding: 20,
+    marginBottom: 28,
+    backgroundColor: "#F8FBFF",
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    borderColor: "#d1fae5",
+    borderColor: "#E6F3FF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 10,
   },
   recommendationsHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 20,
+    paddingRight: 4,
   },
   recommendationsHeaderLeft: {
     flexDirection: "row",
@@ -503,20 +605,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   refreshButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
+    marginRight: 8,
   },
   recommendationsTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: "#222222",
   },
@@ -524,11 +627,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    marginBottom: 16,
+    borderRadius: 18,
+    marginBottom: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
   },
   statItem: {
     alignItems: "center",
@@ -566,38 +674,43 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tag: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: "#F0F9FF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#0d9488",
+    borderColor: "#BFDBFE",
   },
   tagText: {
     fontSize: 12,
-    color: "#0d9488",
+    color: "#1E40AF",
     fontWeight: "600",
   },
   regionTag: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#0d9488",
+    borderColor: "#BBF7D0",
   },
   regionTagText: {
     fontSize: 12,
-    color: "#0d9488",
+    color: "#166534",
     fontWeight: "600",
   },
   aiTextContainer: {
-    marginTop: 4,
-    padding: 16,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: "#0d9488",
+    marginTop: 8,
+    padding: 18,
+    backgroundColor: "#FEFEFE",
+    borderRadius: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: "#60A5FA",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   aiText: {
     fontSize: 13,
@@ -605,12 +718,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   recommendationsLoading: {
-    marginTop: 24,
-    padding: 20,
+    marginTop: 28,
+    padding: 24,
     alignItems: "center",
-    backgroundColor: "#F0F9FB",
-    borderRadius: 16,
+    backgroundColor: "#F8FBFF",
+    borderRadius: 20,
     gap: 12,
+    borderWidth: 1,
+    borderColor: "#E6F3FF",
   },
   loadingText: {
     fontSize: 14,

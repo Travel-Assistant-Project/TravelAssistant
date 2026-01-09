@@ -16,14 +16,15 @@ export default function TabLayout() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E5E5EA',
-          paddingBottom: 5,
+          paddingBottom: 0,
           paddingTop: 5,
-          height: 85,
+          height: 80,
         },
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '500',
         },
+
       }}>
       <Tabs.Screen
         name="index"
@@ -62,6 +63,12 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="my-trips"
+        options={{
+          href: null, // Tab bar'da gösterme
+        }}
+      />
+      <Tabs.Screen
+        name="events"
         options={{
           href: null, // Tab bar'da gösterme
         }}

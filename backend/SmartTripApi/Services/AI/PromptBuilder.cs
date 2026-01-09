@@ -2,7 +2,7 @@ using SmartTripApi.DTOs;
 
 namespace SmartTripApi.Services.AI
 {
-  public class PromptBuilder
+  public partial class PromptBuilder
   {
     public string BuildRoutePlanPrompt(RoutePlanRequestDto request)
     {
