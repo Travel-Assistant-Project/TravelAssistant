@@ -9,7 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Platform
+  Platform,
+  Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -161,6 +162,20 @@ export default function EventsScreen() {
     } catch (error) {
       console.error('Error checking auth status:', error);
       setIsAuthenticated(false);
+    }
+  };
+
+  const handleTicketPress = async (ticketUrl: string) => {
+    try {
+      const supported = await Linking.canOpenURL(ticketUrl);
+      if (supported) {
+        await Linking.openURL(ticketUrl);
+      } else {
+        Alert.alert('Error', 'Unable to open the ticket URL');
+      }
+    } catch (error) {
+      console.error('Error opening ticket URL:', error);
+      Alert.alert('Error', 'Failed to open ticket page');
     }
   };
 
@@ -657,7 +672,10 @@ export default function EventsScreen() {
               <View style={styles.eventFooter}>
                 <Text style={styles.eventSource}>via {event.source}</Text>
                 {event.ticketUrl && (
-                  <TouchableOpacity style={styles.ticketButton}>
+                  <TouchableOpacity 
+                    style={styles.ticketButton}
+                    onPress={() => handleTicketPress(event.ticketUrl!)}
+                  >
                     <Text style={styles.ticketButtonText}>Get Tickets</Text>
                     <Ionicons name="open-outline" size={16} color="white" />
                   </TouchableOpacity>

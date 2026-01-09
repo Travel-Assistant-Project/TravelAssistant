@@ -143,7 +143,6 @@ namespace SmartTripApi.Services.Events
 
             // Use category-based placeholder images instead of problematic Ticketmaster images
             var eventType = tmEvent.Classifications?.FirstOrDefault()?.Segment?.Name?.ToLower() ?? "music";
-            eventDto.ImageUrl = GetCategoryImageUrl(eventType);
             
             _logger.LogInformation("Event {EventName} assigned category image for type: {EventType}", 
                 tmEvent.Name, eventType);
@@ -187,113 +186,6 @@ namespace SmartTripApi.Services.Events
             return eventDto;
         }
 
-        private string GetCategoryImageUrl(string eventType)
-        {
-            var random = new Random();
-            
-            return eventType switch
-            {
-                // Music Events - Concert and music specific images
-                "music" or "concerts" => random.Next(4) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // concert crowd
-                    1 => "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // concert stage
-                    _ => "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // live music
-                },
-                
-                // Sports Events - Different sports images
-                "sports" => random.Next(4) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // stadium
-                    1 => "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // football
-                    2 => "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // basketball
-                    _ => "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // tennis
-                },
-                
-                // Arts & Theatre - Performance and stage images
-                "arts" or "theatre" or "theater" => random.Next(1) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1507676184212-d03ab07a01bf?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // theatre curtain
-                },
-                
-                // Family Events - Family-friendly activities
-                "family" => random.Next(3) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1511593358241-7eea1f3c84e5?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // carnival
-                    1 => "https://images.unsplash.com/photo-1533924721034-8b3da3f2b735?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // amusement park
-                    _ => "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // family fun
-                },
-                
-                // Film Events - Cinema and movie related
-                "film" => random.Next(3) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // cinema
-                    1 => "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // film reel
-                    _ => "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // movie theater
-                },
-                
-                // Comedy Events - Comedy and entertainment
-                "comedy" => random.Next(2) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // comedy club
-                    _ => "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // microphone on stage
-                },
-                
-                // Dance Events - Dance performances
-                "dance" => random.Next(3) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // ballet
-                    1 => "https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // modern dance
-                    _ => "https://images.unsplash.com/photo-1508700929628-666bc8bd84ea?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // dance floor
-                },
-                
-                // Festival Events - Festival atmosphere
-                "festival" or "fair" => random.Next(3) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // festival crowd
-                    1 => "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // outdoor festival
-                    _ => "https://images.unsplash.com/photo-1549451371-64aa98a6f0b2?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // music festival
-                },
-                
-                // Business & Conference Events
-                "business" or "conference" => random.Next(2) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // conference
-                    _ => "https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // business meeting
-                },
-                
-                // Food & Culinary Events
-                "food" or "culinary" => random.Next(3) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // food market
-                    1 => "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // cooking
-                    _ => "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // restaurant
-                },
-                
-                // Technology & Innovation Events
-                "technology" or "tech" or "innovation" => random.Next(2) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // tech conference
-                    _ => "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // technology
-                },
-                
-                // Networking & Social Events
-                "networking" or "social" => random.Next(2) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // networking
-                    _ => "https://images.unsplash.com/photo-1528605105345-5344ea20e269?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // social gathering
-                },
-                
-                // Default event image - Generic event venues
-                _ => random.Next(4) switch
-                {
-                    0 => "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // event hall
-                    1 => "https://images.unsplash.com/photo-1564484981795-4f34435fdd52?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // event space
-                    2 => "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80", // conference room
-                    _ => "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=300&fit=crop&crop=entropy&auto=format&q=80"  // event venue
-                }
-            };
-        }
 
         private string GetCountryCodeFromLocation(string location)
         {

@@ -8,12 +8,17 @@ import {
   View,
   ActivityIndicator,
   Alert,
+  Image,
+  Dimensions,
+  FlatList,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "@/lib/api";
+
+const { width } = Dimensions.get('window');
 
 interface Trip {
   id: number;
@@ -38,6 +43,90 @@ interface UserRecommendations {
   preferredIntensity: string;
   aiRecommendations: string;
 }
+
+// Popüler yerler mock verisi
+interface PopularPlace {
+  id: number;
+  name: string;
+  location: string;
+  image: string;
+  rating: number;
+}
+
+const popularPlaces: PopularPlace[] = [
+  {
+    id: 1,
+    name: "Santorini",
+    location: "Greece",
+    image: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400",
+    rating: 4.8,
+  },
+
+  {
+    id: 3,
+    name: "Bali",
+    location: "Indonesia",
+    image: "https://images.unsplash.com/photo-1537953773345-d172ccf13cf1?w=400",
+    rating: 4.7,
+  },
+  {
+    id: 4,
+    name: "Maldives",
+    location: "Indian Ocean",
+    image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400",
+    rating: 4.9,
+  },
+  {
+    id: 5,
+    name: "Tokyo",
+    location: "Japan",
+    image: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400",
+    rating: 4.6,
+  },
+
+  {
+    id: 8,
+    name: "Swiss Alps",
+    location: "Switzerland",
+    image: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=400",
+    rating: 4.9,
+  },
+  {
+    id: 9,
+    name: "Dubai",
+    location: "UAE",
+    image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=400",
+    rating: 4.6,
+  },
+  {
+    id: 10,
+    name: "New York",
+    location: "USA",
+    image: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400",
+    rating: 4.5,
+  },
+  {
+    id: 11,
+    name: "Barcelona",
+    location: "Spain",
+    image: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400",
+    rating: 4.7,
+  },
+  {
+    id: 12,
+    name: "Prague",
+    location: "Czech Republic",
+    image: "https://images.unsplash.com/photo-1541849546-216549ae216d?w=400",
+    rating: 4.8,
+  },
+  {
+    id: 13,
+    name: "Machu Picchu",
+    location: "Peru",
+    image: "https://images.unsplash.com/photo-1587595431973-160d0d94add1?w=400",
+    rating: 4.9,
+  },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -156,6 +245,22 @@ export default function HomeScreen() {
     router.push("/(tabs)/explore");
   };
 
+  const renderPopularPlace = ({ item }: { item: PopularPlace }) => (
+    <TouchableOpacity style={styles.placeCard} activeOpacity={0.8}>
+      <Image source={{ uri: item.image }} style={styles.placeImage} />
+      <View style={styles.placeGradient}>
+        <View style={styles.placeInfo}>
+          <Text style={styles.placeName}>{item.name}</Text>
+          <Text style={styles.placeLocation}>{item.location}</Text>
+          <View style={styles.ratingContainer}>
+            <IconSymbol name="star.fill" size={12} color="#FFD700" />
+            <Text style={styles.ratingText}>{item.rating}</Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* kaymayı çözüyor */}
@@ -198,6 +303,26 @@ export default function HomeScreen() {
             editable={true}
           />
         </TouchableOpacity>
+
+        {/* Popular Places Section */}
+        <View style={styles.popularPlacesSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>✨ Popular Destinations</Text>
+            <TouchableOpacity onPress={() => router.push("/(tabs)/explore")}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <FlatList
+            data={popularPlaces}
+            renderItem={renderPopularPlace}
+            keyExtractor={(item) => item.id.toString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.placesContainer}
+            ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+          />
+        </View>
 
         {/* Quick Actions Section */}
         <View style={styles.quickActionsSection}>
@@ -342,8 +467,8 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.tripsGrid}>
                 {recentTrips.map((trip, index) => {
-                  const colors = ["#97D8FF", "#D8B389", "#FFB6C1", "#B4E7CE"];
-                  const backgroundColor = colors[index % 4];
+                  const colors = ["#E8F4F4", "#D4EDEE", "#BFE6E8", "#AAE0E2", "#94D9DC", "#7FB3D6"];
+                  const backgroundColor = colors[index % 6];
 
                   return (
                     <TouchableOpacity
@@ -385,10 +510,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFFFFF", // Diğer sayfalarla tutarlı beyaz background
   },
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF", // Diğer sayfalarla tutarlı beyaz background
   },
   content: {
     paddingHorizontal: 24,
@@ -429,23 +555,18 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: "#F5F5F7", // Explore sayfası ile tutarlı gri background
+    borderRadius: 16, // Explore sayfası ile tutarlı küçük radius
+    paddingHorizontal: 14, // Explore sayfası ile tutarlı padding
+    paddingVertical: 12, // Explore sayfası ile tutarlı padding
     marginBottom: 28,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 4,
+    // Shadow ve border kaldırıldı - explore sayfası gibi sadeleştirildi
   },
   searchInput: {
     marginLeft: 8,
     flex: 1,
-    fontSize: 14,
+    fontSize: 15, // Explore sayfası ile tutarlı font size
+    color: "#222222", // Explore sayfası ile tutarlı text color
   },
   quickActionsSection: {
     marginBottom: 24,
@@ -457,17 +578,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   quickActionButton: {
-    backgroundColor: "#FDFFFE",
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 18,
     marginBottom: 14,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 6,
     borderWidth: 1,
-    borderColor: "#F0F4F8",
+    borderColor: "#F0F4F8", // Daha subtle border
+    borderLeftWidth: 4, // Sol tarafına kalın yeşil çizgi
+    borderLeftColor: "#5C9B9B", // Ana tema yeşil rengi
   },
   quickActionContent: {
     flexDirection: "row",
@@ -581,16 +704,18 @@ const styles = StyleSheet.create({
   recommendationsSection: {
     marginTop: 2,
     marginBottom: 28,
-    backgroundColor: "#F8FBFF",
+    backgroundColor: "#F8FBFF", // Daha subtle background
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: "#E6F3FF",
+    borderColor: "#E6F3FF", // Daha subtle border
+    borderLeftWidth: 4, // Sol tarafına kalın yeşil çizgi
+    borderLeftColor: "#5C9B9B", // Ana tema yeşil rengi
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   recommendationsHeader: {
     flexDirection: "row",
@@ -730,5 +855,62 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     color: "#6b7280",
+  },
+  // Popular Places Styles
+  popularPlacesSection: {
+    marginBottom: 28,
+  },
+  placesContainer: {
+    paddingLeft: 7, // Daha soldan başlaması için 24'ten 16'ya düşürdüm
+    paddingRight: 8,
+  },
+  placeCard: {
+    width: 200,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  placeImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  placeGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '60%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  placeInfo: {
+    gap: 2,
+  },
+  placeName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  placeLocation: {
+    fontSize: 13,
+    color: '#E5E5E5',
+    marginBottom: 4,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });

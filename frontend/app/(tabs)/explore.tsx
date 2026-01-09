@@ -39,11 +39,11 @@ export default function ExploreScreen() {
   const categories: Category[] = [
     { id: '1', name: 'All', icon: '🌍' },
     { id: '2', name: 'Nature', icon: '🌲' },
-    { id: '3', name: 'History', icon: '🎭' },
-    { id: '4', name: 'Beach', icon: '🏖️' },
-    { id: '5', name: 'Food', icon: '🍽️' },
-    { id: '6', name: 'Photospot', icon: '📸' },
-    { id: '7', name: 'Sea', icon: '⛰️' },
+    { id: '3', name: 'Sea', icon: '🌊' },
+    { id: '4', name: 'History', icon: '🎭' },
+    { id: '5', name: 'Beach', icon: '🏖️' },
+    { id: '6', name: 'Food', icon: '🍽️' },
+    { id: '7', name: 'Photospot', icon: '📸' },
   ];
 
   useEffect(() => {
