@@ -10,6 +10,9 @@ using SmartTripApi.Services.Weather;
 using SmartTripApi.Services.RoutePlanning;
 using System.Text;
 using DotNetEnv;
+using StackExchange.Redis;
+using SmartTripApi.Services.RoutePlanning.Caching;
+
 
 // Load .env file
 Env.Load();
@@ -34,6 +37,18 @@ builder.Services.AddCors(options =>
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+// Redis (Cache)
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+{
+    var redisConn = Environment.GetEnvironmentVariable("REDIS_CONNECTION") ?? "localhost:6379";
+    return ConnectionMultiplexer.Connect(redisConn);
+});
+
+// Cache services
+builder.Services.AddSingleton<ICacheKeyBuilder, CacheKeyBuilder>();
+builder.Services.AddSingleton<IRouteCacheService, RedisRouteCacheService>();
+
+builder.Services.AddHttpContextAccessor();
 
 var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
 var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "travelassistant";

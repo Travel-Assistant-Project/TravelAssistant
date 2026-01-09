@@ -4,10 +4,12 @@ namespace SmartTripApi.Services.RoutePlanning
 {
     public interface IRoutePlanService
     {
-        Task<ServiceResult<RoutePlanResponseDto>> CreateRoutePlanAsync(int userId, RoutePlanRequestDto request);
+        Task<ServiceResult<RoutePlanResponseDto>> CreateRoutePlanAsync(
+            int userId,
+            RoutePlanRequestDto request,
+            bool forceRegenerate = false);
 
         Task<RoutePlanResponseDto?> GetRoutePlanAsync(int userId, int itineraryId);
-
         Task<List<UserRouteSummaryDto>> GetUserRoutePlansAsync(int userId);
     }
 }

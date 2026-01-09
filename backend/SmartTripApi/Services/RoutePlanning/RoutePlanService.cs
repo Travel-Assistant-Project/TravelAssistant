@@ -1,15 +1,16 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection; // 👈 YENİ
+using Microsoft.Extensions.DependencyInjection;
 using SmartTripApi.Data;
 using SmartTripApi.DTOs;
+using SmartTripApi.Helpers;
+using SmartTripApi.Mappers;
 using SmartTripApi.Models;
 using SmartTripApi.Services.AI;
 using SmartTripApi.Services.GooglePlaces;
+using SmartTripApi.Services.RoutePlanning.Caching;
 using SmartTripApi.Services.Weather;
-using SmartTripApi.Mappers;
-using SmartTripApi.Helpers;
 
 namespace SmartTripApi.Services.RoutePlanning
 {
@@ -18,41 +19,54 @@ namespace SmartTripApi.Services.RoutePlanning
         private readonly AppDbContext _context;
         private readonly AIService _aiService;
         private readonly PlaceEnrichmentService _placeEnrichmentService;
-        private readonly TransportEnrichmentService _transportEnrichmentService; // New Service
+        private readonly TransportEnrichmentService _transportEnrichmentService;
         private readonly IWeatherService _weatherService;
         private readonly ILogger<RoutePlanService> _logger;
-        private readonly IServiceScopeFactory _scopeFactory; // 👈 YENİ
+        private readonly IServiceScopeFactory _scopeFactory;
+
+        // cache
+        private readonly ICacheKeyBuilder _cacheKeyBuilder;
+        private readonly IRouteCacheService _routeCache;
 
         public RoutePlanService(
             AppDbContext context,
             AIService aiService,
             PlaceEnrichmentService placeEnrichmentService,
-            TransportEnrichmentService transportEnrichmentService, // Inject here
+            TransportEnrichmentService transportEnrichmentService,
             IWeatherService weatherService,
             ILogger<RoutePlanService> logger,
-            IServiceScopeFactory scopeFactory)                     // 👈 YENİ
+            IServiceScopeFactory scopeFactory,
+            ICacheKeyBuilder cacheKeyBuilder,
+            IRouteCacheService routeCache)
         {
             _context = context;
             _aiService = aiService;
             _placeEnrichmentService = placeEnrichmentService;
-            _transportEnrichmentService = transportEnrichmentService; // Assign
+            _transportEnrichmentService = transportEnrichmentService;
             _weatherService = weatherService;
             _logger = logger;
-            _scopeFactory = scopeFactory;                           // 👈 YENİ
+            _scopeFactory = scopeFactory;
+
+            _cacheKeyBuilder = cacheKeyBuilder;
+            _routeCache = routeCache;
         }
 
         public async Task<ServiceResult<RoutePlanResponseDto>> CreateRoutePlanAsync(
             int userId,
-            RoutePlanRequestDto request)
+            RoutePlanRequestDto request,
+            bool forceRegenerate = false)
         {
-            // ⏱ Total süre
             var swTotal = Stopwatch.StartNew();
-
             AIRequest? aiRequest = null;
+
+            string? cacheKey = null;
+            string? requestHash = null;
+            string? lockToken = null;
+
+            var cacheStatus = forceRegenerate ? "BYPASS" : "MISS";
 
             try
             {
-                // user var mı
                 var user = await _context.Users.FindAsync(userId);
                 if (user == null)
                 {
@@ -63,7 +77,89 @@ namespace SmartTripApi.Services.RoutePlanning
                 _logger.LogInformation("Generating route plan for user {UserId} in region {Region}",
                     userId, request.Region);
 
+                //build cache key/hash
+                var built = _cacheKeyBuilder.Build(userId, request);
+                cacheKey = built.cacheKey;
+                requestHash = built.requestHash;
+
+                var ttl = TimeSpan.FromDays(7);
+
+                // -----------------------------
+                //  CACHE / FALLBACK / LOCK
+                // -----------------------------
+                if (!forceRegenerate)
+                {
+
+                    var cachedItineraryId = await _routeCache.GetItineraryIdAsync(cacheKey);
+                    if (cachedItineraryId.HasValue)
+                    {
+                        var cachedRoute = await GetRoutePlanAsync(userId, cachedItineraryId.Value);
+                        if (cachedRoute != null)
+                        {
+                            swTotal.Stop();
+                            return ServiceResult<RoutePlanResponseDto>.Ok(cachedRoute, "HIT");
+                        }
+                    }
+
+                    var existingIndex = await _context.ItineraryRequestIndexes
+                        .AsNoTracking()
+                        .Where(x => x.UserId == userId && x.RequestHash == requestHash)
+                        .OrderByDescending(x => x.CreatedAt)
+                        .FirstOrDefaultAsync();
+
+                    if (existingIndex != null)
+                    {
+                        await _routeCache.SetItineraryIdAsync(cacheKey, existingIndex.ItineraryId, ttl);
+
+                        var dbRoute = await GetRoutePlanAsync(userId, existingIndex.ItineraryId);
+                        if (dbRoute != null)
+                        {
+                            swTotal.Stop();
+                            return ServiceResult<RoutePlanResponseDto>.Ok(dbRoute, "DB_FALLBACK");
+                        }
+                    }
+
+                    lockToken = await _routeCache.TryAcquireLockAsync(cacheKey, TimeSpan.FromSeconds(60));
+                    if (lockToken == null)
+                    {
+                        var waitedId = await _routeCache.WaitForItineraryIdAsync(
+                            cacheKey,
+                            timeout: TimeSpan.FromSeconds(25),
+                            pollInterval: TimeSpan.FromMilliseconds(250));
+
+                        if (waitedId.HasValue)
+                        {
+                            var waitedRoute = await GetRoutePlanAsync(userId, waitedId.Value);
+                            if (waitedRoute != null)
+                            {
+                                swTotal.Stop();
+                                return ServiceResult<RoutePlanResponseDto>.Ok(waitedRoute, "WAITED");
+                            }
+                        }
+
+                        lockToken = await _routeCache.TryAcquireLockAsync(cacheKey, TimeSpan.FromSeconds(60));
+                        if (lockToken == null)
+                        {
+                            cacheStatus = "MISS_LOCKED";
+                        }
+                        else
+                        {
+                            cacheStatus = "MISS";
+                        }
+                    }
+                    else
+                    {
+                        cacheStatus = "MISS";
+                    }
+                }
+                else
+                {
+                    cacheStatus = "BYPASS";
+                }
+
+                // -----------------------------
                 // AI request log
+                // -----------------------------
                 var requestPayloadJson = JsonSerializer.Serialize(new
                 {
                     region = request.Region,
@@ -89,7 +185,6 @@ namespace SmartTripApi.Services.RoutePlanning
                 var swAi = Stopwatch.StartNew();
                 _logger.LogInformation("⏱ AI route plan request started for user {UserId}", userId);
 
-                // AI çağrısı
                 var aiResponse = await _aiService.GenerateRoutePlanAsync(request);
 
                 swAi.Stop();
@@ -102,25 +197,17 @@ namespace SmartTripApi.Services.RoutePlanning
                 var primaryIntensity = request.GetPrimaryIntensity();
                 var primaryTransport = request.GetPrimaryTransport();
 
-                // Itinerary oluştur
+                // Itinerary
                 var itinerary = new Itinerary
                 {
                     UserId = userId,
                     Name = aiResponse.PlanName,
                     Region = request.Region,
                     DaysCount = request.Days,
-                    Theme = primaryTheme.HasValue
-                        ? ConvertToThemeEnum(primaryTheme.Value.ToString().ToLower())
-                        : null,
-                    Budget = primaryBudget.HasValue
-                        ? ConvertToBudgetEnum(primaryBudget.Value.ToString().ToLower())
-                        : null,
-                    Intensity = primaryIntensity.HasValue
-                        ? ConvertToIntensityEnum(primaryIntensity.Value.ToString().ToLower())
-                        : null,
-                    Transport = primaryTransport.HasValue
-                        ? ConvertToTransportEnum(primaryTransport.Value.ToString().ToLower())
-                        : null,
+                    Theme = primaryTheme.HasValue ? ConvertToThemeEnum(primaryTheme.Value.ToString().ToLower()) : null,
+                    Budget = primaryBudget.HasValue ? ConvertToBudgetEnum(primaryBudget.Value.ToString().ToLower()) : null,
+                    Intensity = primaryIntensity.HasValue ? ConvertToIntensityEnum(primaryIntensity.Value.ToString().ToLower()) : null,
+                    Transport = primaryTransport.HasValue ? ConvertToTransportEnum(primaryTransport.Value.ToString().ToLower()) : null,
                     IsAiGenerated = true,
                     Status = "pending",
                     CreatedAt = DateTimeHelper.GetTurkeyTime()
@@ -132,13 +219,43 @@ namespace SmartTripApi.Services.RoutePlanning
                 _logger.LogInformation("Created itinerary {ItineraryId} for user {UserId}",
                     itinerary.Id, userId);
 
+                if (!string.IsNullOrWhiteSpace(requestHash))
+                {
+                    var now = DateTimeHelper.GetTurkeyTime();
+
+                    var existing = await _context.ItineraryRequestIndexes
+                        .FirstOrDefaultAsync(x => x.UserId == userId && x.RequestHash == requestHash);
+
+                    if (existing == null)
+                    {
+                        _context.ItineraryRequestIndexes.Add(new ItineraryRequestIndex
+                        {
+                            UserId = userId,
+                            ItineraryId = itinerary.Id,
+                            RequestHash = requestHash,
+                            CreatedAt = now
+                        });
+                    }
+                    else
+                    {
+                        // aynı hash varsa: yeni itinerary'yi en güncel yap
+                        existing.ItineraryId = itinerary.Id;
+                        existing.CreatedAt = now;
+                    }
+
+                    await _context.SaveChangesAsync();
+                }
+
+                if (!string.IsNullOrWhiteSpace(cacheKey))
+                {
+                    await _routeCache.SetItineraryIdAsync(cacheKey, itinerary.Id, TimeSpan.FromDays(7));
+                }
+
                 var responseDays = new List<DayDetailDto>();
 
-                // ⏱ Gün + aktiviteler build süresi
                 var swBuild = Stopwatch.StartNew();
                 _logger.LogInformation("⏱ Building itinerary days & activities for itinerary {ItineraryId}", itinerary.Id);
 
-                // Gün + aktiviteler
                 foreach (var aiDay in aiResponse.Days)
                 {
                     var itineraryDay = new ItineraryDay
@@ -157,7 +274,6 @@ namespace SmartTripApi.Services.RoutePlanning
                     {
                         try
                         {
-                            // Place bul / oluştur
                             Place? place = null;
                             if (aiActivity.Place != null && !string.IsNullOrEmpty(aiActivity.Place.Name))
                             {
@@ -185,11 +301,9 @@ namespace SmartTripApi.Services.RoutePlanning
                                 }
                             }
 
-                            // Parse time strings safely
                             var startTime = ParseTimeString(aiActivity.StartTime ?? "");
                             var endTime = ParseTimeString(aiActivity.EndTime ?? "");
 
-                            // Activity
                             var activity = new Models.Activity
                             {
                                 ItineraryDayId = itineraryDay.Id,
@@ -234,7 +348,6 @@ namespace SmartTripApi.Services.RoutePlanning
                             _logger.LogError(ex,
                                 "Error processing activity '{ActivityTitle}' for day {DayNumber}. Skipping this activity.",
                                 aiActivity.Title ?? "Unknown", aiDay.DayNumber);
-                            // Continue with next activity instead of failing entire request
                         }
                     }
 
@@ -253,13 +366,11 @@ namespace SmartTripApi.Services.RoutePlanning
                     "Successfully created route plan with {DaysCount} days and {ItineraryId}",
                     responseDays.Count, itinerary.Id);
 
-                // AIRequest update
                 aiRequest.ItineraryId = itinerary.Id;
                 aiRequest.Status = "completed";
                 aiRequest.AiResponse = JsonDocument.Parse(JsonSerializer.Serialize(aiResponse));
                 await _context.SaveChangesAsync();
 
-                // --- RESPONSE'U HAZIRLA ---
                 var response = new RoutePlanResponseDto
                 {
                     ItineraryId = itinerary.Id,
@@ -269,7 +380,7 @@ namespace SmartTripApi.Services.RoutePlanning
                     Days = responseDays
                 };
 
-                // --- ENRICHMENT'İ BACKGROUND'A AL ---
+                // enrichment background
                 _ = Task.Run(async () =>
                 {
                     using var scope = _scopeFactory.CreateScope();
@@ -298,7 +409,6 @@ namespace SmartTripApi.Services.RoutePlanning
                         await placeEnrichment.EnrichItineraryPlacesAsync(itinerary.Id);
                         await weatherService.UpdateItineraryWeatherAsync(itinerary.Id);
 
-                        // Transport Enrichment
                         try
                         {
                             await transportEnrichment.EnrichItineraryTransportAsync(itinerary.Id);
@@ -306,7 +416,6 @@ namespace SmartTripApi.Services.RoutePlanning
                         catch (Exception ex)
                         {
                             logger.LogError(ex, "Error enriching transport for itinerary {ItineraryId}", itinerary.Id);
-                            // Don't fail the whole process if transport enrichment fails
                         }
 
                         itineraryEntity.Status = "completed";
@@ -329,10 +438,7 @@ namespace SmartTripApi.Services.RoutePlanning
                                 await scopedContext.SaveChangesAsync();
                             }
                         }
-                        catch
-                        {
-                            // burada ekstra log istersen ekleyebilirsin
-                        }
+                        catch { }
                     }
                 });
 
@@ -340,13 +446,22 @@ namespace SmartTripApi.Services.RoutePlanning
                 _logger.LogInformation("⏱ CreateRoutePlanAsync TOTAL duration: {Duration} ms for user {UserId}",
                     swTotal.ElapsedMilliseconds, userId);
 
-                // Kullanıcıyı bekletmeden dön
-                return ServiceResult<RoutePlanResponseDto>.Ok(response);
+                if (!forceRegenerate && !string.IsNullOrWhiteSpace(lockToken) && !string.IsNullOrWhiteSpace(cacheKey))
+                {
+                    await _routeCache.ReleaseLockAsync(cacheKey, lockToken);
+                }
+
+                return ServiceResult<RoutePlanResponseDto>.Ok(response, cacheStatus);
             }
             catch (Exception ex)
             {
                 swTotal.Stop();
                 _logger.LogError(ex, "Error creating route plan for region {Region}", request.Region);
+
+                if (!forceRegenerate && !string.IsNullOrWhiteSpace(lockToken) && !string.IsNullOrWhiteSpace(cacheKey))
+                {
+                    try { await _routeCache.ReleaseLockAsync(cacheKey, lockToken); } catch { }
+                }
 
                 if (aiRequest != null)
                 {
@@ -402,7 +517,6 @@ namespace SmartTripApi.Services.RoutePlanning
             if (string.IsNullOrWhiteSpace(timeString))
                 return null;
 
-            // Temizle - whitespace ve özel karakterleri kaldır
             timeString = timeString.Trim()
                 .Replace(" ", "")
                 .Replace("\t", "")
@@ -414,11 +528,9 @@ namespace SmartTripApi.Services.RoutePlanning
 
             try
             {
-                // Önce standart TimeSpan.TryParse dene (InvariantCulture ile)
                 if (TimeSpan.TryParse(timeString, System.Globalization.CultureInfo.InvariantCulture, out var time))
                     return time;
 
-                // "HH:mm" formatında deneme (örn: "09:00", "14:30")
                 var formats = new[] { "HH:mm", "H:mm", "hh:mm", "h:mm", "HH:mm:ss", "H:mm:ss", "h:mm tt", "hh:mm tt" };
 
                 foreach (var format in formats)
@@ -433,7 +545,6 @@ namespace SmartTripApi.Services.RoutePlanning
                     }
                 }
 
-                // Manuel parse denemesi (örn: "9:00" -> 9 saat, 0 dakika)
                 var parts = timeString.Split(':');
                 if (parts.Length >= 2 &&
                     int.TryParse(parts[0], out var hours) &&
