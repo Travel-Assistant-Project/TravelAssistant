@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { api } from '@/lib/api';
 
@@ -29,6 +30,7 @@ interface Destination {
 }
 
 export default function ExploreScreen() {
+  const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [destinations, setDestinations] = useState<Destination[]>([]);
@@ -177,7 +179,11 @@ export default function ExploreScreen() {
         {!isLoading && filteredDestinations.length > 0 && (
           <View style={styles.cardsContainer}>
             {filteredDestinations.map((destination) => (
-              <TouchableOpacity key={destination.id} style={styles.card}>
+              <TouchableOpacity 
+                key={destination.id} 
+                style={styles.card}
+                onPress={() => router.push(`/place-detail?id=${destination.id}`)}
+              >
                 {destination.image ? (
                   <Image
                     source={{ uri: destination.image }}

@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using SmartTripApi.DTOs;
 using SmartTripApi.Services.AI;
+using SmartTripApi.Services;
+using SmartTripApi.Extensions;
 
 namespace SmartTripApi.Controllers
 {
@@ -9,10 +12,12 @@ namespace SmartTripApi.Controllers
     public class AIController : ControllerBase
     {
         private readonly AIService _aiService;
+        private readonly UserAnalysisService _userAnalysisService;
 
-        public AIController(AIService aiService)
+        public AIController(AIService aiService, UserAnalysisService userAnalysisService)
         {
             _aiService = aiService;
+            _userAnalysisService = userAnalysisService;
         }
 
         [HttpPost("generate-trip")]
@@ -22,6 +27,28 @@ namespace SmartTripApi.Controllers
             {
                 var tripPlan = await _aiService.GenerateTripPlanAsync(request);
                 return Ok(tripPlan);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get personalized recommendations based on user's favorite trips and places
+        /// </summary>
+        [HttpGet("user-recommendations")]
+        [Authorize]
+        public async Task<ActionResult<UserAnalysisResult>> GetUserRecommendations()
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+                return Unauthorized(new { message = "Invalid user token" });
+
+            try
+            {
+                var analysis = await _userAnalysisService.AnalyzeUserPreferencesAsync(userId.Value);
+                return Ok(analysis);
             }
             catch (Exception ex)
             {

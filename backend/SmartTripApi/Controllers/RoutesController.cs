@@ -6,7 +6,6 @@ using SmartTripApi.DTOs;
 using SmartTripApi.Extensions;
 using SmartTripApi.Services.GooglePlaces;
 using SmartTripApi.Services.RoutePlanning;
-
 using System.Security.Claims;
 
 namespace SmartTripApi.Controllers
@@ -32,20 +31,39 @@ namespace SmartTripApi.Controllers
             _logger = logger;
         }
 
+        // POST /api/routes/plan?forceRegenerate=true
         [HttpPost("plan")]
         [Authorize]
         public async Task<ActionResult<RoutePlanResponseDto>> CreateRoutePlan(
-            [FromBody] RoutePlanRequestDto request)
+            [FromBody] RoutePlanRequestDto request,
+            [FromQuery] bool forceRegenerate = false)
         {
-
             var userId = User.GetUserId();
             if (userId is null)
                 return Unauthorized(new { message = "Invalid user token" });
 
-            var result = await _routePlanService.CreateRoutePlanAsync(userId.Value, request);
+            var result = await _routePlanService.CreateRoutePlanAsync(userId.Value, request, forceRegenerate);
 
             if (!result.Success)
                 return StatusCode(result.StatusCode, new { message = result.ErrorMessage });
+
+            // X-Cache header
+            if (!string.IsNullOrWhiteSpace(result.CacheStatus))
+            {
+                Response.Headers["X-Cache"] = result.CacheStatus!;
+            }
+            else if (HttpContext.Items.TryGetValue("X-Cache", out var xCacheObj) &&
+                     xCacheObj is string xCache &&
+                     !string.IsNullOrWhiteSpace(xCache))
+            {
+
+                Response.Headers["X-Cache"] = xCache;
+            }
+            else if (forceRegenerate)
+            {
+                Response.Headers["X-Cache"] = "BYPASS";
+            }
+
             return Ok(result.Data);
         }
 
@@ -76,8 +94,6 @@ namespace SmartTripApi.Controllers
             return Ok(routes);
         }
 
-        // EnrichExistingPlacesWithReviews SERVİSE TAŞINABİLİR 
-
         [HttpPost("enrich-reviews")]
         [Authorize]
         public async Task<ActionResult> EnrichExistingPlacesWithReviews()
@@ -86,69 +102,8 @@ namespace SmartTripApi.Controllers
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                {
                     return Unauthorized(new { message = "Invalid user token" });
-                }
 
-                var placesNeedingReviews = await _context.Places
-                    .Where(p => !string.IsNullOrEmpty(p.GooglePlaceId))
-                    .Where(p => !_context.GoogleReviews.Any(gr => gr.PlaceId == p.Id))
-                    .ToListAsync();
-
-                _logger.LogInformation("Found {Count} places needing review enrichment",
-                    placesNeedingReviews.Count);
-
-                int successCount = 0;
-                int failCount = 0;
-
-                foreach (var place in placesNeedingReviews)
-                {
-                    try
-                    {
-                        var success = await _placeEnrichmentService.EnrichPlaceReviewsAsync(place.Id);
-                        if (success)
-                            successCount++;
-                        else
-                            failCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failCount++;
-                        _logger.LogError(ex,
-                            "Failed to enrich reviews for place {PlaceId} ({PlaceName})",
-                            place.Id, place.Name);
-                    }
-                }
-
-                return Ok(new
-                {
-                    message = "Review enrichment completed",
-                    totalPlaces = placesNeedingReviews.Count,
-                    successCount,
-                    failCount
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during review enrichment");
-                return StatusCode(500, new { message = "Failed to enrich reviews", error = ex.Message });
-            }
-        }
-
-        
-        [HttpPost("enrich-reviews")]
-        [Authorize]
-        public async Task<ActionResult> EnrichExistingPlacesWithReviews()
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                {
-                    return Unauthorized(new { message = "Invalid user token" });
-                }
-
-                // Find places that have google_place_id but no reviews
                 var placesNeedingReviews = await _context.Places
                     .Where(p => !string.IsNullOrEmpty(p.GooglePlaceId))
                     .Where(p => !_context.GoogleReviews.Any(gr => gr.PlaceId == p.Id))
@@ -164,21 +119,19 @@ namespace SmartTripApi.Controllers
                     try
                     {
                         var success = await _placeEnrichmentService.EnrichPlaceReviewsAsync(place.Id);
-                        if (success)
-                            successCount++;
-                        else
-                            failCount++;
+                        if (success) successCount++;
+                        else failCount++;
                     }
                     catch (Exception ex)
                     {
                         failCount++;
-                        _logger.LogError(ex, "Failed to enrich reviews for place {PlaceId} ({PlaceName})", 
+                        _logger.LogError(ex, "Failed to enrich reviews for place {PlaceId} ({PlaceName})",
                             place.Id, place.Name);
                     }
                 }
 
-                return Ok(new 
-                { 
+                return Ok(new
+                {
                     message = "Review enrichment completed",
                     totalPlaces = placesNeedingReviews.Count,
                     successCount,
