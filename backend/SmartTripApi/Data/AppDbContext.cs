@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<GoogleReview> GoogleReviews => Set<GoogleReview>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
     public DbSet<ActivityTransport> ActivityTransports => Set<ActivityTransport>();
+    public DbSet<ItineraryRequestIndex> ItineraryRequestIndexes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -238,8 +239,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.ItineraryId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Ensure only one of PlaceId or ItineraryId is set
-            e.HasCheckConstraint("CK_Favorites_OneReference", 
+            e.HasCheckConstraint("CK_Favorites_OneReference",
                 "(place_id IS NOT NULL AND itinerary_id IS NULL) OR (place_id IS NULL AND itinerary_id IS NOT NULL)");
         });
 
@@ -259,6 +259,35 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Activity)
                 .WithOne(a => a.Transport)
                 .HasForeignKey<ActivityTransport>(x => x.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Itinerary Request Index (manual DB table: itinerary_request_indexes)
+        m.Entity<ItineraryRequestIndex>(e =>
+        {
+            e.ToTable("itinerary_request_indexes");
+
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.ItineraryId).HasColumnName("itinerary_id");
+            e.Property(x => x.RequestHash).HasColumnName("request_hash");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasKey(x => x.Id);
+
+            e.HasIndex(x => new { x.UserId, x.RequestHash })
+                .IsUnique()
+                .HasDatabaseName("ux_itinerary_request_indexes_user_hash");
+
+            // keep EF relationships consistent with your FK constraints
+            e.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<Itinerary>()
+                .WithMany()
+                .HasForeignKey(x => x.ItineraryId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
