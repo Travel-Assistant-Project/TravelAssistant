@@ -317,15 +317,15 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     width: width,
-    height: 350,
+    height: 450,
   },
   placeImage: {
     width: width,
-    height: 350,
+    height: 450,
   },
   placeholderImage: {
     width: width,
-    height: 350,
+    height: 450,
     backgroundColor: '#E5E5EA',
     alignItems: 'center',
     justifyContent: 'center',
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   backButtonOverlay: {
     position: 'absolute',
-    top: 16,
+    top: 60,
     left: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     width: 40,

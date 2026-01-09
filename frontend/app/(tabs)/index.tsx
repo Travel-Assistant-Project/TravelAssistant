@@ -7,12 +7,18 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Alert,
+  Image,
+  Dimensions,
+  FlatList,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "@/lib/api";
+
+const { width } = Dimensions.get('window');
 
 interface Trip {
   id: number;
@@ -38,9 +44,94 @@ interface UserRecommendations {
   aiRecommendations: string;
 }
 
+// Popüler yerler mock verisi
+interface PopularPlace {
+  id: number;
+  name: string;
+  location: string;
+  image: string;
+  rating: number;
+}
+
+const popularPlaces: PopularPlace[] = [
+  {
+    id: 1,
+    name: "Santorini",
+    location: "Greece",
+    image: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400",
+    rating: 4.8,
+  },
+
+  {
+    id: 3,
+    name: "Bali",
+    location: "Indonesia",
+    image: "https://images.unsplash.com/photo-1537953773345-d172ccf13cf1?w=400",
+    rating: 4.7,
+  },
+  {
+    id: 4,
+    name: "Maldives",
+    location: "Indian Ocean",
+    image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400",
+    rating: 4.9,
+  },
+  {
+    id: 5,
+    name: "Tokyo",
+    location: "Japan",
+    image: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400",
+    rating: 4.6,
+  },
+
+  {
+    id: 8,
+    name: "Swiss Alps",
+    location: "Switzerland",
+    image: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=400",
+    rating: 4.9,
+  },
+  {
+    id: 9,
+    name: "Dubai",
+    location: "UAE",
+    image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=400",
+    rating: 4.6,
+  },
+  {
+    id: 10,
+    name: "New York",
+    location: "USA",
+    image: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400",
+    rating: 4.5,
+  },
+  {
+    id: 11,
+    name: "Barcelona",
+    location: "Spain",
+    image: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400",
+    rating: 4.7,
+  },
+  {
+    id: 12,
+    name: "Prague",
+    location: "Czech Republic",
+    image: "https://images.unsplash.com/photo-1541849546-216549ae216d?w=400",
+    rating: 4.8,
+  },
+  {
+    id: 13,
+    name: "Machu Picchu",
+    location: "Peru",
+    image: "https://images.unsplash.com/photo-1587595431973-160d0d94add1?w=400",
+    rating: 4.9,
+  },
+];
+
 export default function HomeScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [recommendations, setRecommendations] = useState<UserRecommendations | null>(null);
@@ -120,12 +211,55 @@ export default function HomeScreen() {
     router.push('/(tabs)/my-trips');
   };
 
+  const handleEventsPress = () => {
+    router.push('/(tabs)/events');
+  };
+
   const handleTripPress = (tripId: number) => {
     router.push({
       pathname: "/trip-detail",
       params: { itineraryId: tripId.toString() },
     });
   };
+
+  const handleNotificationPress = () => {
+    Alert.alert(
+      "Notifications",
+      "You have no new notifications at the moment.",
+      [{ text: "OK", style: "default" }]
+    );
+  };
+
+  const handleSearchSubmit = () => {
+    if (searchQuery.trim()) {
+      router.push({
+        pathname: "/(tabs)/explore",
+        params: { query: searchQuery.trim() },
+      });
+    } else {
+      Alert.alert("Search", "Please enter a destination to search for trips.");
+    }
+  };
+
+  const handleSearchPress = () => {
+    router.push("/(tabs)/explore");
+  };
+
+  const renderPopularPlace = ({ item }: { item: PopularPlace }) => (
+    <TouchableOpacity style={styles.placeCard} activeOpacity={0.8}>
+      <Image source={{ uri: item.image }} style={styles.placeImage} />
+      <View style={styles.placeGradient}>
+        <View style={styles.placeInfo}>
+          <Text style={styles.placeName}>{item.name}</Text>
+          <Text style={styles.placeLocation}>{item.location}</Text>
+          <View style={styles.ratingContainer}>
+            <IconSymbol name="star.fill" size={12} color="#FFD700" />
+            <Text style={styles.ratingText}>{item.rating}</Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -143,43 +277,97 @@ export default function HomeScreen() {
             <Text style={styles.subtitle}>Where would you like to go?</Text>
           </View>
 
-          <TouchableOpacity style={styles.bellButton}>
+          <TouchableOpacity 
+            style={styles.bellButton}
+            onPress={handleNotificationPress}
+            activeOpacity={0.7}
+          >
             <IconSymbol name="bell" size={20} color="#4A4A4A" />
           </TouchableOpacity>
         </View>
 
         {/* Search */}
-        <View style={styles.searchContainer}>
+        <TouchableOpacity 
+          style={styles.searchContainer}
+          onPress={handleSearchPress}
+          activeOpacity={0.8}
+        >
           <IconSymbol name="magnifyingglass" size={18} color="#8E8E8F" />
           <TextInput
             placeholder="Where do you want to go?"
             style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearchSubmit}
+            returnKeyType="search"
+            editable={true}
+          />
+        </TouchableOpacity>
+
+        {/* Popular Places Section */}
+        <View style={styles.popularPlacesSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>✨ Popular Destinations</Text>
+            <TouchableOpacity onPress={() => router.push("/(tabs)/explore")}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <FlatList
+            data={popularPlaces}
+            renderItem={renderPopularPlace}
+            keyExtractor={(item) => item.id.toString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.placesContainer}
+            ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
           />
         </View>
 
-        {/* My Trips Button */}
-        <TouchableOpacity 
-          style={styles.myTripsButton}
-          onPress={handleMyTripsPress}
-          activeOpacity={0.8}
-        >
-          <View style={styles.myTripsButtonContent}>
-            <IconSymbol name="map.fill" size={24} color="#0d9488" />
-            <View style={styles.myTripsButtonText}>
-              <Text style={styles.myTripsButtonTitle}>My Trips</Text>
-              <Text style={styles.myTripsButtonSubtitle}>View all your trips</Text>
+        {/* Quick Actions Section */}
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+          
+          {/* My Trips Button */}
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={handleMyTripsPress}
+            activeOpacity={0.8}
+          >
+            <View style={styles.quickActionContent}>
+              <IconSymbol name="map.fill" size={24} color="#0d9488" />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>My Trips</Text>
+                <Text style={styles.quickActionSubtitle}>View all your trips</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color="#9ca3af" />
             </View>
-            <IconSymbol name="chevron.right" size={20} color="#9ca3af" />
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+
+          {/* Events Button */}
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={handleEventsPress}
+            activeOpacity={0.8}
+          >
+            <View style={styles.quickActionContent}>
+              <IconSymbol name="calendar" size={24} color="#0d9488" />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>Find Events</Text>
+                <Text style={styles.quickActionSubtitle}>Discover concerts & shows</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color="#9ca3af" />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* AI Recommendations Section */}
         {recommendations && (
           <View style={styles.recommendationsSection}>
             <View style={styles.recommendationsHeader}>
               <View style={styles.recommendationsHeaderLeft}>
-                <IconSymbol name="sparkles" size={22} color="#0d9488" />
-                <Text style={styles.recommendationsTitle}>Recommendations for You</Text>
+                <IconSymbol name="sparkles" size={25} color="#0d9488" />
+                <Text style={styles.recommendationsTitle}>Your Best Matches</Text>
               </View>
               <TouchableOpacity 
                 style={styles.refreshButton}
@@ -279,8 +467,8 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.tripsGrid}>
                 {recentTrips.map((trip, index) => {
-                  const colors = ["#97D8FF", "#D8B389", "#FFB6C1", "#B4E7CE"];
-                  const backgroundColor = colors[index % 4];
+                  const colors = ["#E8F4F4", "#D4EDEE", "#BFE6E8", "#AAE0E2", "#94D9DC", "#7FB3D6"];
+                  const backgroundColor = colors[index % 6];
 
                   return (
                     <TouchableOpacity
@@ -322,10 +510,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFFFFF", // Diğer sayfalarla tutarlı beyaz background
   },
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF", // Diğer sayfalarla tutarlı beyaz background
   },
   content: {
     paddingHorizontal: 24,
@@ -349,54 +538,75 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   bellButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E5E5EA",
+    borderColor: "#F0F4F8",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#FAFBFC",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F5F7",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 24,
+    backgroundColor: "#F5F5F7", // Explore sayfası ile tutarlı gri background
+    borderRadius: 16, // Explore sayfası ile tutarlı küçük radius
+    paddingHorizontal: 14, // Explore sayfası ile tutarlı padding
+    paddingVertical: 12, // Explore sayfası ile tutarlı padding
+    marginBottom: 28,
+    // Shadow ve border kaldırıldı - explore sayfası gibi sadeleştirildi
   },
   searchInput: {
     marginLeft: 8,
     flex: 1,
-    fontSize: 14,
+    fontSize: 15, // Explore sayfası ile tutarlı font size
+    color: "#222222", // Explore sayfası ile tutarlı text color
   },
-  myTripsButton: {
-    backgroundColor: "#F0F9FB",
-    borderRadius: 16,
-    padding: 16,
+  quickActionsSection: {
     marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  myTripsButtonContent: {
+  quickActionsTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#222222",
+    marginBottom: 16,
+  },
+  quickActionButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#F0F4F8", // Daha subtle border
+    borderLeftWidth: 4, // Sol tarafına kalın yeşil çizgi
+    borderLeftColor: "#5C9B9B", // Ana tema yeşil rengi
+  },
+  quickActionContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  myTripsButtonText: {
+  quickActionText: {
     flex: 1,
   },
-  myTripsButtonTitle: {
+  quickActionTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#222222",
     marginBottom: 2,
   },
-  myTripsButtonSubtitle: {
+  quickActionSubtitle: {
     fontSize: 13,
     color: "#6b7280",
   },
@@ -432,15 +642,17 @@ const styles = StyleSheet.create({
   },
   tripCard: {
     width: "31%",
-    height: 140,
-    borderRadius: 16,
-    padding: 12,
+    height: 150,
+    borderRadius: 20,
+    padding: 16,
     justifyContent: "flex-end",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   tripCardContent: {
     flex: 1,
@@ -469,13 +681,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   suggestionCard: {
-    marginTop: 24,
+    marginTop: 28,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F9FB",
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
   },
   suggestionText: {
     fontSize: 14,
@@ -484,18 +703,26 @@ const styles = StyleSheet.create({
   // AI Recommendations Styles
   recommendationsSection: {
     marginTop: 2,
-    marginBottom: 24,
-    backgroundColor: "#F0F9FB",
-    borderRadius: 20,
-    padding: 20,
+    marginBottom: 28,
+    backgroundColor: "#F8FBFF", // Daha subtle background
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    borderColor: "#d1fae5",
+    borderColor: "#E6F3FF", // Daha subtle border
+    borderLeftWidth: 4, // Sol tarafına kalın yeşil çizgi
+    borderLeftColor: "#5C9B9B", // Ana tema yeşil rengi
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   recommendationsHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 20,
+    paddingRight: 4,
   },
   recommendationsHeaderLeft: {
     flexDirection: "row",
@@ -503,20 +730,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   refreshButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
+    marginRight: 8,
   },
   recommendationsTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: "#222222",
   },
@@ -524,11 +752,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    marginBottom: 16,
+    borderRadius: 18,
+    marginBottom: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
   },
   statItem: {
     alignItems: "center",
@@ -566,38 +799,43 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tag: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: "#F0F9FF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#0d9488",
+    borderColor: "#BFDBFE",
   },
   tagText: {
     fontSize: 12,
-    color: "#0d9488",
+    color: "#1E40AF",
     fontWeight: "600",
   },
   regionTag: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#0d9488",
+    borderColor: "#BBF7D0",
   },
   regionTagText: {
     fontSize: 12,
-    color: "#0d9488",
+    color: "#166534",
     fontWeight: "600",
   },
   aiTextContainer: {
-    marginTop: 4,
-    padding: 16,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: "#0d9488",
+    marginTop: 8,
+    padding: 18,
+    backgroundColor: "#FEFEFE",
+    borderRadius: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: "#60A5FA",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   aiText: {
     fontSize: 13,
@@ -605,15 +843,74 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   recommendationsLoading: {
-    marginTop: 24,
-    padding: 20,
+    marginTop: 28,
+    padding: 24,
     alignItems: "center",
-    backgroundColor: "#F0F9FB",
-    borderRadius: 16,
+    backgroundColor: "#F8FBFF",
+    borderRadius: 20,
     gap: 12,
+    borderWidth: 1,
+    borderColor: "#E6F3FF",
   },
   loadingText: {
     fontSize: 14,
     color: "#6b7280",
+  },
+  // Popular Places Styles
+  popularPlacesSection: {
+    marginBottom: 28,
+  },
+  placesContainer: {
+    paddingLeft: 7, // Daha soldan başlaması için 24'ten 16'ya düşürdüm
+    paddingRight: 8,
+  },
+  placeCard: {
+    width: 200,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  placeImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  placeGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '60%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  placeInfo: {
+    gap: 2,
+  },
+  placeName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  placeLocation: {
+    fontSize: 13,
+    color: '#E5E5E5',
+    marginBottom: 4,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });

@@ -420,7 +420,15 @@ export default function TripDetailScreen() {
                   </View>
                  )}
 
-                <View style={styles.activityCard}>
+                <TouchableOpacity 
+                  style={styles.activityCard}
+                  onPress={() => {
+                    if (activity.place?.id) {
+                      router.push(`/place-detail?id=${activity.place.id}`);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
                 <View style={styles.timeContainer}>
                     <Text style={styles.timeText}>{formatTime(activity.startTime)}</Text>
                 </View>
@@ -450,7 +458,10 @@ export default function TripDetailScreen() {
                     {activity.place?.id && (
                       <TouchableOpacity
                         style={styles.favoritePlaceButton}
-                        onPress={() => togglePlaceFavorite(activity.place!.id!)}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          togglePlaceFavorite(activity.place!.id!);
+                        }}
                       >
                         <IconSymbol
                           name={favoritePlaces.has(activity.place.id) ? 'heart.fill' : 'heart'}
@@ -488,7 +499,7 @@ export default function TripDetailScreen() {
                     </View>
                     </View>
                 </View>
-                </View>
+                </TouchableOpacity>
             </View>
           ))}
            <View style={{height: 40}} />

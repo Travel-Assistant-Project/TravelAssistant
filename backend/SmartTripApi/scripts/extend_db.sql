@@ -78,3 +78,15 @@ CREATE INDEX IF NOT EXISTS idx_activity_transports_activity_id ON activity_trans
 -- ADD COLUMN photo_references text[] NULL;
 
 -- COMMENT ON COLUMN places.photo_references IS 'Google Places photo reference strings for proxy usage';
+
+---- 09.01.2026
+CREATE TABLE IF NOT EXISTS itinerary_request_indexes (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    itinerary_id INT NOT NULL REFERENCES itineraries(id) ON DELETE CASCADE,
+    request_hash TEXT NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_itinerary_request_indexes_user_hash
+ON itinerary_request_indexes (user_id, request_hash);

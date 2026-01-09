@@ -8,6 +8,7 @@ using SmartTripApi.Services.AI;
 using SmartTripApi.Services.GooglePlaces;
 using SmartTripApi.Services.Weather;
 using SmartTripApi.Services.RoutePlanning;
+using SmartTripApi.Services.Events;
 using System.Text;
 using DotNetEnv;
 using StackExchange.Redis;
@@ -112,6 +113,11 @@ builder.Services.AddHttpClient<IWeatherService, WeatherService>();
 //Route Planning Service 
 builder.Services.AddScoped<IRoutePlanService, RoutePlanService>();
 
+// Events Services
+builder.Services.AddHttpClient<TicketmasterService>();
+builder.Services.AddHttpClient<EventbriteService>();
+builder.Services.AddScoped<IEventService, HybridEventService>();
+
 // User Analysis Service
 builder.Services.AddScoped<UserAnalysisService>();
 
@@ -119,6 +125,8 @@ builder.Services.AddScoped<UserAnalysisService>();
 var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 var googleApiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
 var weatherApiKey = Environment.GetEnvironmentVariable("WEATHERAPI_KEY");
+var ticketmasterApiKey = Environment.GetEnvironmentVariable("TICKETMASTER_API_KEY");
+var eventbriteApiToken = Environment.GetEnvironmentVariable("EVENTBRITE_API_TOKEN");
 
 if (!string.IsNullOrEmpty(geminiApiKey))
 {
@@ -134,6 +142,16 @@ if (!string.IsNullOrEmpty(weatherApiKey))
 {
     // Yeni config path → WeatherApi:ApiKey
     builder.Configuration["WeatherApi:ApiKey"] = weatherApiKey;
+}
+
+if (!string.IsNullOrEmpty(ticketmasterApiKey))
+{
+    builder.Configuration["TicketmasterApi:ApiKey"] = ticketmasterApiKey;
+}
+
+if (!string.IsNullOrEmpty(eventbriteApiToken))
+{
+    builder.Configuration["EventbriteApi:Token"] = eventbriteApiToken;
 }
 
 
