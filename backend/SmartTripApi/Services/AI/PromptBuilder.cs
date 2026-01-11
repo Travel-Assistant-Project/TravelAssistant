@@ -29,7 +29,7 @@ Trip Parameters:
 - Transportation Modes: {transports}
 
 IMPORTANT LOCATION RULE:
-All activities and places MUST be strictly within {request.Region} and ONLY within the same country.
+All activities and places MUST be strictly within {request.Region} and ONLY within the same country and same city.
 Do NOT suggest places from neighboring countries or nearby border cities.
 
 PLACE RULES:
@@ -39,7 +39,7 @@ PLACE RULES:
 - Place.Name must be short and clear (max ~60 characters).
 
 TRANSPORT LOGIC:
-- If ""walk"" is selected: All activities must be within walking distance of each other (max 1 hour walk between locations). Keep activities in the same neighborhood or district.
+- If ""walk"" is selected: All activities must be within walking distance of each other (max 30 minutes walk between locations). 
 - If ""car"" is selected: Driving time between activities should not exceed 2 hours. Plan routes efficiently to minimize travel time.
 - If ""public_transport"" is selected: Activities should be accessible via public transportation with reasonable travel times (max 1.5 hours between locations).
 - Multiple transport modes: Optimize for the most restrictive mode while allowing flexibility.

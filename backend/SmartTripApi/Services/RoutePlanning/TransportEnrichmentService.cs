@@ -36,21 +36,8 @@ namespace SmartTripApi.Services.RoutePlanning
 
             if (itinerary == null) return;
 
-            // Transport modunu belirle
-            var transportMode = "transit"; // Default
-            
-            // Eğer kullanıcı özellikle araba veya yürüyüş seçtiyse onu kullan
-            if (itinerary.Transport == TransportModeEnum.car)
-            {
-                transportMode = "driving";
-            }
-            else if (itinerary.Transport == TransportModeEnum.walk)
-            {
-                transportMode = "walking";
-            }
-
-            _logger.LogInformation("Enriching itinerary {ItineraryId} with transport mode {Mode}. Days: {DayCount}", 
-                itineraryId, transportMode, itinerary.ItineraryDays.Count);
+            _logger.LogInformation("Enriching itinerary {ItineraryId} with intelligent transport selection. Days: {DayCount}", 
+                itineraryId, itinerary.ItineraryDays.Count);
 
             foreach (var day in itinerary.ItineraryDays.OrderBy(d => d.DayNumber))
             {
@@ -71,49 +58,39 @@ namespace SmartTripApi.Services.RoutePlanning
 
                     _logger.LogInformation("Fetching directions from {Origin} to {Dest}", prevActivity.Place.Name, currentActivity.Place.Name);
 
-                    var directions = await _googlePlacesService.GetDirectionsAsync(
+                    // Get user's selected transport modes
+                    var selectedTransports = itinerary.GetSelectedTransportModes();
+                    _logger.LogInformation("User selected transport modes: {Modes}", string.Join(", ", selectedTransports));
+
+                    // Smart transport selection based on distance and user preferences
+                    var smartTransportResult = await GetSmartTransportDirections(
                         prevActivity.Place.GooglePlaceId,
                         currentActivity.Place.GooglePlaceId,
-                        transportMode);
+                        selectedTransports);
 
-                    // FALLBACK LOGIC: If transit fails, try driving
-                    bool usedFallback = false;
-                    if ((directions == null || directions.Routes == null || !directions.Routes.Any() || directions.Status == "ZERO_RESULTS") && transportMode == "transit")
-                    {
-                        _logger.LogWarning("Transit directions not found. Trying DRIVING as fallback...");
-                        var fallbackDirections = await _googlePlacesService.GetDirectionsAsync(
-                            prevActivity.Place.GooglePlaceId,
-                            currentActivity.Place.GooglePlaceId,
-                            "driving");
-                        
-                        if (fallbackDirections != null && fallbackDirections.Routes != null && fallbackDirections.Routes.Any())
-                        {
-                            directions = fallbackDirections;
-                            usedFallback = true;
-                        }
-                    }
+                    var directions = smartTransportResult.directions;
+                    var finalTransportMode = smartTransportResult.finalMode;
 
                     if (directions?.Routes != null && directions.Routes.Any())
                     {
-                        _logger.LogInformation("Directions found! Route count: {RouteCount}", directions.Routes.Count);
+                        _logger.LogInformation("Directions found! Route count: {RouteCount}, Final mode: {Mode}", directions.Routes.Count, finalTransportMode);
                         
                         var route = directions.Routes.First();
                         var leg = route.Legs.FirstOrDefault();
 
                         if (leg != null)
                         {
-                            _logger.LogInformation("Saving transport details for Activity {ActivityId}. Duration: {Duration}", currentActivity.Id, leg.Duration?.Text);
+                            _logger.LogInformation("Saving transport details for Activity {ActivityId}. Duration: {Duration}, Mode: {Mode}", 
+                                currentActivity.Id, leg.Duration?.Text, finalTransportMode);
 
-                            // Kaydederken "public_transport" string'ini kullanıyoruz frontend uyumu için
-                            string modeForDb = "public_transport";
-                            if (transportMode == "driving") modeForDb = "driving";
-                            if (transportMode == "walking") modeForDb = "walking";
-                            
-                            // If we used fallback, save as driving so frontend renders it green
-                            if (usedFallback) 
+                            // Map transport mode to database string
+                            string modeForDb = finalTransportMode switch
                             {
-                                modeForDb = "driving";
-                            }
+                                "driving" => "driving",
+                                "walking" => "walking", 
+                                "transit" => "public_transport",
+                                _ => "public_transport"
+                            };
 
                             var stepsSummary = ExtractTransitSummary(leg);
                             var stepsJson = JsonSerializer.Serialize(stepsSummary);
@@ -167,7 +144,8 @@ namespace SmartTripApi.Services.RoutePlanning
                     }
                     else
                     {
-                        _logger.LogWarning("No directions found. Status: {Status}", directions?.Status);
+                        _logger.LogWarning("No directions found for transport between {Origin} and {Destination}", 
+                            prevActivity.Place.Name, currentActivity.Place.Name);
                     }
                     
                     // API rate limiting
@@ -175,6 +153,164 @@ namespace SmartTripApi.Services.RoutePlanning
                 }
             }
             // await _context.SaveChangesAsync(); // Moved inside loop
+        }
+
+        private async Task<(GoogleDirectionsResponse? directions, string finalMode)> GetSmartTransportDirections(
+            string originPlaceId, 
+            string destinationPlaceId, 
+            List<string> selectedTransports)
+        {
+            _logger.LogInformation("GetSmartTransportDirections called with transports: {Transports}", string.Join(", ", selectedTransports));
+            
+            // Step 1: Always check walking distance first to determine if it's feasible
+            var walkingDirections = await _googlePlacesService.GetDirectionsAsync(
+                originPlaceId, destinationPlaceId, "walking");
+
+            bool isWalkingFeasible = false;
+            int walkingDurationMinutes = 0;
+
+            if (walkingDirections?.Routes != null && walkingDirections.Routes.Any())
+            {
+                var walkingLeg = walkingDirections.Routes.First().Legs.FirstOrDefault();
+                if (walkingLeg?.Duration?.Value != null)
+                {
+                    walkingDurationMinutes = (int)Math.Ceiling((double)walkingLeg.Duration.Value / 60);
+                    isWalkingFeasible = walkingDurationMinutes <= 30; // 30 minutes or less
+                }
+            }
+
+            _logger.LogInformation("Walking duration: {WalkingDuration} minutes, feasible: {IsFeasible}", 
+                walkingDurationMinutes, isWalkingFeasible);
+
+            // Step 2: Use smart transport selection based on user's choices
+            var selectedTransportMode = DetermineSmartTransport(selectedTransports, walkingDurationMinutes);
+            _logger.LogInformation("Smart transport decision: {Mode}", selectedTransportMode);
+            
+            // Step 3: Get directions for the selected transport mode
+            GoogleDirectionsResponse? finalDirections = null;
+            string finalMode = selectedTransportMode;
+            
+            switch (selectedTransportMode.ToLower())
+            {
+                case "walking":
+                    finalDirections = walkingDirections;
+                    break;
+                    
+                case "driving":
+                    finalDirections = await _googlePlacesService.GetDirectionsAsync(
+                        originPlaceId, destinationPlaceId, "driving");
+                    break;
+                    
+                case "transit":
+                    finalDirections = await _googlePlacesService.GetDirectionsAsync(
+                        originPlaceId, destinationPlaceId, "transit");
+                    break;
+            }
+
+            // Step 4: Fallback logic if the selected mode doesn't work
+            if (finalDirections?.Routes == null || !finalDirections.Routes.Any() || finalDirections.Status == "ZERO_RESULTS")
+            {
+                _logger.LogWarning("Selected transport mode {Mode} failed, trying fallback options", selectedTransportMode);
+                
+                // Try walking first as fallback
+                if (walkingDirections?.Routes != null && walkingDirections.Routes.Any())
+                {
+                    _logger.LogInformation("Using walking as fallback");
+                    return (walkingDirections, "walking");
+                }
+                
+                // Then try driving
+                var drivingFallback = await _googlePlacesService.GetDirectionsAsync(
+                    originPlaceId, destinationPlaceId, "driving");
+                if (drivingFallback?.Routes != null && drivingFallback.Routes.Any())
+                {
+                    _logger.LogInformation("Using driving as fallback");
+                    return (drivingFallback, "driving");
+                }
+                
+                // Finally try transit
+                var transitFallback = await _googlePlacesService.GetDirectionsAsync(
+                    originPlaceId, destinationPlaceId, "transit");
+                if (transitFallback?.Routes != null && transitFallback.Routes.Any())
+                {
+                    _logger.LogInformation("Using transit as fallback");
+                    return (transitFallback, "transit");
+                }
+            }
+
+            _logger.LogInformation("Final transport mode: {Mode}", finalMode);
+            return (finalDirections, finalMode);
+        }
+
+        private string DetermineSmartTransport(List<string> selectedTransports, double? durationMinutes)
+        {
+            _logger.LogInformation("DetermineSmartTransport - Selected: [{Transports}], Duration: {Duration}min", 
+                string.Join(", ", selectedTransports ?? new List<string>()), durationMinutes);
+            
+            // If no specific transports selected, use default logic
+            if (selectedTransports == null || !selectedTransports.Any())
+            {
+                var result = durationMinutes <= 30 ? "walking" : "transit";
+                _logger.LogInformation("No transports selected, using default: {Result}", result);
+                return result;
+            }
+
+            // If only one transport mode selected, use it directly
+            if (selectedTransports.Count == 1)
+            {
+                var result = MapTransportMode(selectedTransports[0]);
+                _logger.LogInformation("Single transport selected: {Selected} -> {Result}", selectedTransports[0], result);
+                return result;
+            }
+
+            // Multiple transport modes selected - use smart selection based on duration
+            bool hasWalking = selectedTransports.Any(t => t.Equals("walk", StringComparison.OrdinalIgnoreCase));
+            bool hasCar = selectedTransports.Any(t => t.Equals("car", StringComparison.OrdinalIgnoreCase));
+            bool hasPublicTransport = selectedTransports.Any(t => 
+                t.Equals("public_transport", StringComparison.OrdinalIgnoreCase) || 
+                t.Equals("Public Transport", StringComparison.OrdinalIgnoreCase));
+
+            _logger.LogInformation("Transport availability - Walking: {Walking}, Car: {Car}, Public: {Public}", 
+                hasWalking, hasCar, hasPublicTransport);
+
+            // For short distances (30 minutes or less), prefer walking if available
+            if (durationMinutes <= 30 && hasWalking)
+            {
+                _logger.LogInformation("Short distance ({Duration}min) + walking available -> walking", durationMinutes);
+                return "walking";
+            }
+
+            // For longer distances, prefer car over public transport if both are available
+            if (durationMinutes > 30)
+            {
+                if (hasCar)
+                {
+                    _logger.LogInformation("Long distance ({Duration}min) + car available -> driving", durationMinutes);
+                    return "driving";
+                }
+                if (hasPublicTransport)
+                {
+                    _logger.LogInformation("Long distance ({Duration}min) + public transport available -> transit", durationMinutes);
+                    return "transit";
+                }
+            }
+
+            // Fallback: return the first available transport mode
+            var fallback = MapTransportMode(selectedTransports[0]);
+            _logger.LogInformation("Using fallback: {Selected} -> {Result}", selectedTransports[0], fallback);
+            return fallback;
+        }
+
+        private string MapTransportMode(string transportMode)
+        {
+            return transportMode?.ToLower() switch
+            {
+                "car" => "driving",
+                "walk" => "walking",
+                "public transport" => "transit",
+                "public_transport" => "transit", // Handle both formats
+                _ => "walking" // Default fallback
+            };
         }
 
         private object ExtractTransitSummary(GoogleDirectionLeg leg)

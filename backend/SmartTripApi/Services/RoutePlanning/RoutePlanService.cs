@@ -208,6 +208,7 @@ namespace SmartTripApi.Services.RoutePlanning
                     Budget = primaryBudget.HasValue ? ConvertToBudgetEnum(primaryBudget.Value.ToString().ToLower()) : null,
                     Intensity = primaryIntensity.HasValue ? ConvertToIntensityEnum(primaryIntensity.Value.ToString().ToLower()) : null,
                     Transport = primaryTransport.HasValue ? ConvertToTransportEnum(primaryTransport.Value.ToString().ToLower()) : null,
+                    SelectedTransportModes = JsonSerializer.Serialize(request.GetTransportStrings()), 
                     IsAiGenerated = true,
                     Status = "pending",
                     CreatedAt = DateTimeHelper.GetTurkeyTime()
