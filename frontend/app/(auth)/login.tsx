@@ -10,7 +10,7 @@ import {
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { login } from "../../services/auth"; // 🔥 Doğru import
+import { login } from "../../services/auth"; 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width } = Dimensions.get("window");
@@ -92,9 +92,6 @@ export default function LoginScreen() {
             <Text style={styles.loginButtonText}>Login</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>

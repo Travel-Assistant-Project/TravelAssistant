@@ -124,7 +124,7 @@ export default function FavoritesScreen() {
             color={activeTab === 'routes' ? '#0d9488' : '#6b7280'} 
           />
           <Text style={[styles.tabText, activeTab === 'routes' && styles.activeTabText]}>
-            Rotalar
+            Routes
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -137,7 +137,7 @@ export default function FavoritesScreen() {
             color={activeTab === 'places' ? '#0d9488' : '#6b7280'} 
           />
           <Text style={[styles.tabText, activeTab === 'places' && styles.activeTabText]}>
-            Mekanlar
+            Places
           </Text>
         </TouchableOpacity>
       </View>

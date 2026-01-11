@@ -90,3 +90,9 @@ CREATE TABLE IF NOT EXISTS itinerary_request_indexes (
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_itinerary_request_indexes_user_hash
 ON itinerary_request_indexes (user_id, request_hash);
+
+
+----- 11.01.2026
+-- Add SelectedTransportModes column to Itineraries table
+ALTER TABLE "Itineraries" 
+ADD COLUMN "SelectedTransportModes" TEXT;
