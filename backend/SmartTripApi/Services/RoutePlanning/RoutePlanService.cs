@@ -380,67 +380,38 @@ namespace SmartTripApi.Services.RoutePlanning
                     Days = responseDays
                 };
 
-                // enrichment background
-                _ = Task.Run(async () =>
+                // SYNC enrichment - execute synchronously to ensure transport data is available
+                try
                 {
-                    using var scope = _scopeFactory.CreateScope();
+                    _logger.LogInformation("Starting enrichment for itinerary {ItineraryId}", itinerary.Id);
 
-                    var scopedContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                    var placeEnrichment = scope.ServiceProvider.GetRequiredService<PlaceEnrichmentService>();
-                    var weatherService = scope.ServiceProvider.GetRequiredService<IWeatherService>();
-                    var transportEnrichment = scope.ServiceProvider.GetRequiredService<TransportEnrichmentService>();
-                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<RoutePlanService>>();
+                    itinerary.Status = "processing";
+                    await _context.SaveChangesAsync();
 
-                    try
+                    await _placeEnrichmentService.EnrichItineraryPlacesAsync(itinerary.Id);
+                    await _weatherService.UpdateItineraryWeatherAsync(itinerary.Id);
+                    await _transportEnrichmentService.EnrichItineraryTransportAsync(itinerary.Id);
+
+                    itinerary.Status = "completed";
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Completed enrichment for itinerary {ItineraryId}", itinerary.Id);
+
+                    // Fetch the enriched data to return
+                    var enrichedRoute = await GetRoutePlanAsync(userId, itinerary.Id);
+                    if (enrichedRoute != null)
                     {
-                        logger.LogInformation("Starting enrichment (places + weather) for itinerary {ItineraryId}",
-                            itinerary.Id);
-
-                        var itineraryEntity = await scopedContext.Itineraries.FindAsync(itinerary.Id);
-                        if (itineraryEntity == null)
-                        {
-                            logger.LogWarning("Itinerary {ItineraryId} not found for enrichment", itinerary.Id);
-                            return;
-                        }
-
-                        itineraryEntity.Status = "processing";
-                        await scopedContext.SaveChangesAsync();
-
-                        await placeEnrichment.EnrichItineraryPlacesAsync(itinerary.Id);
-                        await weatherService.UpdateItineraryWeatherAsync(itinerary.Id);
-
-                        try
-                        {
-                            await transportEnrichment.EnrichItineraryTransportAsync(itinerary.Id);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "Error enriching transport for itinerary {ItineraryId}", itinerary.Id);
-                        }
-
-                        itineraryEntity.Status = "completed";
-                        await scopedContext.SaveChangesAsync();
-
-                        logger.LogInformation("Completed enrichment (places + weather) for itinerary {ItineraryId}",
-                            itinerary.Id);
+                        response = enrichedRoute;
                     }
-                    catch (Exception enrichmentEx)
-                    {
-                        logger.LogError(enrichmentEx,
-                            "Error enriching places/weather for itinerary {ItineraryId}", itinerary.Id);
-
-                        try
-                        {
-                            var itineraryEntity = await scopedContext.Itineraries.FindAsync(itinerary.Id);
-                            if (itineraryEntity != null)
-                            {
-                                itineraryEntity.Status = "completed_with_warnings";
-                                await scopedContext.SaveChangesAsync();
-                            }
-                        }
-                        catch { }
-                    }
-                });
+                }
+                catch (Exception enrichmentEx)
+                {
+                    _logger.LogError(enrichmentEx,
+                        "Error during enrichment for itinerary {ItineraryId}", itinerary.Id);
+                    
+                    itinerary.Status = "completed_with_warnings";
+                    await _context.SaveChangesAsync();
+                }
 
                 swTotal.Stop();
                 _logger.LogInformation("⏱ CreateRoutePlanAsync TOTAL duration: {Duration} ms for user {UserId}",
@@ -481,6 +452,9 @@ namespace SmartTripApi.Services.RoutePlanning
                 .Include(i => i.ItineraryDays)
                     .ThenInclude(d => d.Activities)
                         .ThenInclude(a => a.Place)
+                .Include(i => i.ItineraryDays)
+                    .ThenInclude(d => d.Activities)
+                        .ThenInclude(a => a.Transport)
                 .FirstOrDefaultAsync(i => i.Id == itineraryId && i.UserId == userId);
 
             if (itinerary == null)
