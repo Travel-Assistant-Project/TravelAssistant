@@ -209,6 +209,13 @@ namespace SmartTripApi.Services.RoutePlanning
                     Intensity = primaryIntensity.HasValue ? ConvertToIntensityEnum(primaryIntensity.Value.ToString().ToLower()) : null,
                     Transport = primaryTransport.HasValue ? ConvertToTransportEnum(primaryTransport.Value.ToString().ToLower()) : null,
                     SelectedTransportModes = JsonSerializer.Serialize(request.GetTransportStrings()), 
+                    
+                    // Store original multi-selection parameters for recreation
+                    OriginalThemes = JsonSerializer.Serialize(GetOriginalThemes(request)),
+                    OriginalBudgets = JsonSerializer.Serialize(GetOriginalBudgets(request)),
+                    OriginalIntensities = JsonSerializer.Serialize(GetOriginalIntensities(request)),
+                    OriginalTransports = JsonSerializer.Serialize(GetOriginalTransports(request)),
+                    
                     IsAiGenerated = true,
                     Status = "pending",
                     CreatedAt = DateTimeHelper.GetTurkeyTime()
@@ -578,5 +585,34 @@ namespace SmartTripApi.Services.RoutePlanning
                 "public_transport" => TransportModeEnum.public_transport,
                 _ => null
             };
+
+        // Helper methods to get original parameters from request
+        private List<int> GetOriginalThemes(RoutePlanRequestDto request)
+        {
+            if (request.Themes?.Any() == true) return request.Themes;
+            if (request.Theme.HasValue) return new List<int> { request.Theme.Value };
+            return new List<int>();
+        }
+
+        private List<int> GetOriginalBudgets(RoutePlanRequestDto request)
+        {
+            if (request.Budgets?.Any() == true) return request.Budgets;
+            if (request.Budget.HasValue) return new List<int> { request.Budget.Value };
+            return new List<int>();
+        }
+
+        private List<int> GetOriginalIntensities(RoutePlanRequestDto request)
+        {
+            if (request.Intensities?.Any() == true) return request.Intensities;
+            if (request.Intensity.HasValue) return new List<int> { request.Intensity.Value };
+            return new List<int>();
+        }
+
+        private List<int> GetOriginalTransports(RoutePlanRequestDto request)
+        {
+            if (request.Transports?.Any() == true) return request.Transports;
+            if (request.Transport.HasValue) return new List<int> { request.Transport.Value };
+            return new List<int>();
+        }
     }
 }

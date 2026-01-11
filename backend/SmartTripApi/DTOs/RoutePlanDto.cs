@@ -116,6 +116,12 @@ namespace SmartTripApi.DTOs
         public string Region { get; set; } = string.Empty;
         public int DaysCount { get; set; }
         public List<DayDetailDto> Days { get; set; } = new();
+        
+        // Original request parameters for recreation
+        public List<int> OriginalThemes { get; set; } = new();
+        public List<int> OriginalBudgets { get; set; } = new();
+        public List<int> OriginalIntensities { get; set; } = new();
+        public List<int> OriginalTransports { get; set; } = new();
     }
 
     public class DayDetailDto

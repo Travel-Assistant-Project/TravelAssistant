@@ -14,6 +14,13 @@ namespace SmartTripApi.Mappers
                 PlanName = itinerary.Name,
                 Region = itinerary.Region,
                 DaysCount = itinerary.DaysCount,
+                
+                // Include original parameters for recreation
+                OriginalThemes = itinerary.GetOriginalThemes(),
+                OriginalBudgets = itinerary.GetOriginalBudgets(),
+                OriginalIntensities = itinerary.GetOriginalIntensities(),
+                OriginalTransports = itinerary.GetOriginalTransports(),
+                
                 Days = itinerary.ItineraryDays
                     .OrderBy(d => d.DayNumber)
                     .Select(day => new DayDetailDto
