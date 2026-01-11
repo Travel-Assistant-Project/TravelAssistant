@@ -73,6 +73,11 @@ interface TripData {
   region: string;
   daysCount: number;
   days: DayPlan[];
+  // Original parameters for recreation
+  originalThemes: number[];
+  originalBudgets: number[];
+  originalIntensities: number[];
+  originalTransports: number[];
 }
 
 const BOTTOM_SHEET_MIN_HEIGHT = height * 0.35;
@@ -90,6 +95,7 @@ export default function TripDetailScreen() {
   const [selectedDay, setSelectedDay] = useState(1);
   const [showMapModal, setShowMapModal] = useState(false);
   const [favoritePlaces, setFavoritePlaces] = useState<Set<number>>(new Set());
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // --- Map Modal Bottom Sheet Logic ---
   const panY = useRef(new Animated.Value(0)).current;
@@ -184,6 +190,43 @@ export default function TripDetailScreen() {
       }
     } catch (error) {
       console.error('Error toggling place favorite:', error);
+    }
+  };
+
+  const handleRecreateTrip = async () => {
+    if (!tripData) return;
+    
+    setIsRegenerating(true);
+    
+    try {
+      // Use original parameters from the backend response for accurate recreation
+      const requestBody = {
+        region: tripData.region,
+        days: tripData.daysCount,
+        // Use the original multi-selection parameters
+        themes: tripData.originalThemes.length > 0 ? tripData.originalThemes : [0],
+        budgets: tripData.originalBudgets.length > 0 ? tripData.originalBudgets : [1],
+        intensities: tripData.originalIntensities.length > 0 ? tripData.originalIntensities : [0],
+        transports: tripData.originalTransports.length > 0 ? tripData.originalTransports : [1],
+      };
+
+      console.log('Recreating trip with original parameters and forceRegenerate=true:', requestBody);
+
+      // Call the backend with forceRegenerate=true to bypass cache
+      const response = await api.post('/api/Routes/plan?forceRegenerate=true', requestBody);
+      
+      console.log('Trip recreated successfully:', response.data);
+
+      // Update the trip data with the new response
+      setTripData(response.data);
+      setSelectedDay(1); // Reset to first day
+      
+    } catch (error: any) {
+      console.error('Error recreating trip:', error);
+      // You might want to show an alert to the user
+      alert('Failed to recreate trip. Please try again.');
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -356,31 +399,48 @@ export default function TripDetailScreen() {
 
         {/* Day Selector */}
         <View style={styles.daySelectorContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.daySelectorContent}
-          >
-            {Array.from({ length: tripData.daysCount }, (_, i) => i + 1).map((day) => (
-              <TouchableOpacity
-                key={day}
-                style={[
-                  styles.dayChip,
-                  selectedDay === day && styles.dayChipActive,
-                ]}
-                onPress={() => setSelectedDay(day)}
-              >
-                <Text
+          <View style={styles.daySelectorRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.daySelectorContent}
+            >
+              {Array.from({ length: tripData.daysCount }, (_, i) => i + 1).map((day) => (
+                <TouchableOpacity
+                  key={day}
                   style={[
-                    styles.dayChipText,
-                    selectedDay === day && styles.dayChipTextActive,
+                    styles.dayChip,
+                    selectedDay === day && styles.dayChipActive,
                   ]}
+                  onPress={() => setSelectedDay(day)}
                 >
-                  Day {day}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <Text
+                    style={[
+                      styles.dayChipText,
+                      selectedDay === day && styles.dayChipTextActive,
+                    ]}
+                  >
+                    Day {day}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            <TouchableOpacity 
+              style={[styles.recreateBtn, isRegenerating && styles.recreateBtnDisabled]} 
+              onPress={handleRecreateTrip}
+              disabled={isRegenerating}
+            >
+              {isRegenerating ? (
+                <ActivityIndicator size={12} color="#FFFFFF" />
+              ) : (
+                <IconSymbol name="arrow.clockwise" size={14} color="#FFFFFF" />
+              )}
+              <Text style={styles.recreateBtnText}>
+                {isRegenerating ? "Recreating..." : "Recreate"}
+              </Text>
+            </TouchableOpacity>
+          </View>
           
           {/* Activity Count */}
           <View style={styles.activityCountContainer}>
@@ -819,9 +879,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  daySelectorContent: {
+  daySelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
+  },
+  daySelectorContent: {
+    flex: 1,
     gap: 10,
+  },
+  recreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0d9488',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    gap: 4,
+    marginLeft: 10,
+  },
+  recreateBtnDisabled: {
+    backgroundColor: '#A0A0A0',
+    gap:6,
+  },
+  recreateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   activityCountContainer: {
     flexDirection: 'row',
@@ -830,6 +915,11 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 12,
   },
+  // activityCountLeft: {
+  //   flexDirection: 'row',
+  //   alignItems: 'center',
+  //   gap: 6,
+  // },
   activityCountText: {
     fontSize: 14,
     color: '#0d9488',

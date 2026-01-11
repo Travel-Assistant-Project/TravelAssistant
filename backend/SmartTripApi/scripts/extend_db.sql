@@ -96,3 +96,24 @@ ON itinerary_request_indexes (user_id, request_hash);
 -- Add SelectedTransportModes column to Itineraries table
 ALTER TABLE "Itineraries" 
 ADD COLUMN "SelectedTransportModes" TEXT;
+
+-- Add original parameters columns to itineraries table
+ALTER TABLE itineraries 
+ADD COLUMN original_themes jsonb,
+ADD COLUMN original_budgets jsonb,
+ADD COLUMN original_intensities jsonb,
+ADD COLUMN original_transports jsonb;
+
+-- Add comments for documentation
+COMMENT ON COLUMN itineraries.original_themes IS 'JSON array of original theme selections for recreation';
+COMMENT ON COLUMN itineraries.original_budgets IS 'JSON array of original budget selections for recreation';
+COMMENT ON COLUMN itineraries.original_intensities IS 'JSON array of original intensity selections for recreation';
+COMMENT ON COLUMN itineraries.original_transports IS 'JSON array of original transport selections for recreation';
+
+
+-- selected_transport_modes kolonunu ekle
+ALTER TABLE itineraries 
+ADD COLUMN selected_transport_modes jsonb;
+
+-- Comment ekle
+COMMENT ON COLUMN itineraries.selected_transport_modes IS 'JSON array of selected transport modes';

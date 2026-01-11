@@ -51,6 +51,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.Budget).HasColumnName("budget").HasColumnType("budget_level");
             e.Property(x => x.Intensity).HasColumnName("intensity").HasColumnType("intensity_level");
             e.Property(x => x.Transport).HasColumnName("transport").HasColumnType("transport_mode");
+            e.Property(x => x.SelectedTransportModes).HasColumnName("selected_transport_modes").HasColumnType("jsonb");
+            
+            // Original parameters for recreation
+            e.Property(x => x.OriginalThemes).HasColumnName("original_themes").HasColumnType("jsonb");
+            e.Property(x => x.OriginalBudgets).HasColumnName("original_budgets").HasColumnType("jsonb");
+            e.Property(x => x.OriginalIntensities).HasColumnName("original_intensities").HasColumnType("jsonb");
+            e.Property(x => x.OriginalTransports).HasColumnName("original_transports").HasColumnType("jsonb");
+            
             e.Property(x => x.IsAiGenerated).HasColumnName("is_ai_generated");
             e.Property(x => x.Status).HasColumnName("status");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
