@@ -19,17 +19,23 @@ Edit `.env` and add your actual values:
 ```env
 # Database Configuration
 DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=TravelAssistant
-DB_USER=postgres
+DB_NAME=travelassistant
+DB_USERNAME=postgres
 DB_PASSWORD=your_actual_password
 
 # JWT Configuration
-JWT_SECRET=your-super-secret-key-with-at-least-32-characters-here
+JWT_SECRET=generate-at-least-32-random-bytes
 
-# AI Provider Configuration
+# Cache and external services
+REDIS_CONNECTION=localhost:6379
 GEMINI_API_KEY=your_actual_gemini_api_key
-GOOGLE_PLACES_API_KEY=your_actual_google_places_api_key
+GOOGLE_API_KEY=your_actual_google_places_api_key
+WEATHERAPI_KEY=your_actual_weatherapi_key
+TICKETMASTER_API_KEY=your_actual_ticketmaster_api_key
+EVENTBRITE_API_TOKEN=your_actual_eventbrite_token
+
+# Comma-separated web origins; required in production
+CORS_ALLOWED_ORIGINS=http://localhost:8081,http://localhost:19006
 
 # Application Settings
 ASPNETCORE_ENVIRONMENT=Development
@@ -48,6 +54,8 @@ dotnet run
 - **Never commit `.env` file to git** - it's already in `.gitignore`
 - `.env.example` is a template - commit this to show others what variables are needed
 - All sensitive data (passwords, API keys) should only be in `.env`
+- Production secrets must be supplied by the deployment platform's secret store
+- If a credential has ever been committed, revoke/rotate it; deleting it from the latest file is not sufficient
 
 ## Database Migration
 

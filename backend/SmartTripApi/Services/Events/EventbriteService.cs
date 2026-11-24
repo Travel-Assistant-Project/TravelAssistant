@@ -21,8 +21,12 @@ namespace SmartTripApi.Services.Events
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
             _configuration = configuration;
             _logger = logger;
-            _apiToken = _configuration["EventbriteApi:Token"] 
-                ?? throw new InvalidOperationException("Eventbrite API token not found");
+            _apiToken = _configuration["EventbriteApi:Token"] ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(_apiToken))
+            {
+                throw new InvalidOperationException(
+                    "Eventbrite API token not found. Set EVENTBRITE_API_TOKEN in the environment.");
+            }
         }
 
         public async Task<EventSearchResponseDto> SearchEventsAsync(EventSearchRequestDto request)

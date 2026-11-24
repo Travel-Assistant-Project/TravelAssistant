@@ -26,8 +26,12 @@ namespace SmartTripApi.Services.Events
             _httpClient.Timeout = TimeSpan.FromSeconds(30); // Increase timeout for API calls
             _configuration = configuration;
             _logger = logger;
-            _apiKey = _configuration["TicketmasterApi:ApiKey"] 
-                ?? throw new InvalidOperationException("Ticketmaster API key not found");
+            _apiKey = _configuration["TicketmasterApi:ApiKey"] ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(_apiKey))
+            {
+                throw new InvalidOperationException(
+                    "Ticketmaster API key not found. Set TICKETMASTER_API_KEY in the environment.");
+            }
         }
 
         public async Task<EventSearchResponseDto> SearchEventsAsync(EventSearchRequestDto request)

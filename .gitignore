@@ -28,6 +28,8 @@ obj/
 # --- Environment / secrets ---
 .env
 .env.*
+!.env.example
+!**/.env.example
 secrets.json
 appsettings.Development.json
 appsettings.*.json

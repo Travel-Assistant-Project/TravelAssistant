@@ -25,11 +25,34 @@ builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddControllers();
 
+static string GetRequiredEnvironmentVariable(string name)
+{
+    var value = Environment.GetEnvironmentVariable(name);
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        throw new InvalidOperationException(
+            $"Required environment variable '{name}' is not configured. " +
+            "Copy .env.example to .env and provide a non-placeholder value.");
+    }
+
+    return value;
+}
+
+var configuredOrigins = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS");
+if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(configuredOrigins))
+{
+    throw new InvalidOperationException(
+        "CORS_ALLOWED_ORIGINS must be configured in production.");
+}
+
+var allowedOrigins = (configuredOrigins ?? "http://localhost:8081,http://localhost:19006")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("ConfiguredOrigins", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -54,7 +77,7 @@ builder.Services.AddHttpContextAccessor();
 var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
 var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "travelassistant";
 var dbUser = Environment.GetEnvironmentVariable("DB_USERNAME") ?? "postgres";
-var dbPass = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "";
+var dbPass = GetRequiredEnvironmentVariable("DB_PASSWORD");
 
 // Build connection string from environment variables
 // Set timezone to Turkey (UTC+3)
@@ -77,7 +100,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<JwtTokenService>();
 
-var secret = builder.Configuration["Jwt:Secret"]!;
+var secret = GetRequiredEnvironmentVariable("JWT_SECRET");
+if (Encoding.UTF8.GetByteCount(secret) < 32)
+{
+    throw new InvalidOperationException(
+        "JWT_SECRET must contain at least 32 bytes of unpredictable data.");
+}
+
+builder.Configuration["Jwt:Secret"] = secret;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o =>
     {
@@ -168,7 +198,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
+app.UseCors("ConfiguredOrigins");
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
